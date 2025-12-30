@@ -1,0 +1,13 @@
+name: cr-analyzer
+version: 0.1.0
+
+authors:
+  - Mike Oz <kozloffsky@hotmail.com>
+
+targets:
+  cr-analyzer:
+    main: src/cr-analyzer.cr
+
+crystal: '>= 1.18.2'
+
+license: MIT
