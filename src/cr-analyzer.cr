@@ -2,6 +2,7 @@ require "socket"
 require "http"
 require "json"
 require "./cra/types"
+require "./cra/workspace"
 require "log/io_backend"
 
 module CRA
@@ -9,36 +10,75 @@ module CRA
 
   module JsonRPC
     class Processor
-      def process(request : Types::Request, output : IO)
+      def initialize(@server : Server)
+      end
+
+      def process(request, output : IO)
         response : JSON::Serializable | Nil = handle(request)
         if response
-          body = response.to_json
-          output.print "Content-Length: #{body.bytesize}\r\n"
-          output.print "\r\n"
-          output.print body
+          @server.send(response)
+          @
         end
       end
 
-      def handle(request : Types::InitializeRequest) : Types::Response
-        Log.info { "Handling initialize request" }
-        Types::Response.new(request.id)
+      def handle(request : Types::Message)
+        Log.warn { "Unhandled request type: #{request.class}" }
+        Log.
+
+        nil
+      end
+
+      def handle(request : Types::CompletionRequest)
+        Log.error { "Handling completion request" }
+        Types::Response.new(
+          request.id,
+          Types::CompletionList.new(
+            is_incomplete: false,
+            items: [Types::CompletionItem.new(label: "Test Completion")] of Types::CompletionItem))
       rescue ex
         Log.error { "Error handling request: #{ex.message}" }
         nil
+      end
+
+      def handle(request : Types::InitializedNotification)
+        Log.info { "Client initialized" }
+        nil
+      end
+
+      def handle(request : Types::InitializeRequest)
+        Log.error { "Handling initialize request" }
+        Types::Response.new(request.id, Types::InitializeResult.new(
+          capabilities: Types::ServerCapabilities.new(
+            document_symbol_provider: true,
+            definition_provider: true,
+            references_provider: true,
+            workspace_symbol_provider: true,
+            type_definition_provider: true,
+            implementation_provider: true,
+            document_formatting_provider: false,
+            document_range_formatting_provider: false,
+            rename_provider: true,
+            completion_provider: Types::CompletionOptions.new(trigger_characters: [".", ":", "@", "#", "<", "\"", "'", "/", " "])
+          )
+        ))
+      rescue ex
+        Log.error { "Error handling request: #{ex.message}" }
+        nil
+      end
     end
 
     class RPCRequest
-      getter payload : Types::Request
+      getter payload : Types::Message
       def self.from_io(io)
-        request : Types::Request? = nil
+        request : Types::Message? = nil
         HTTP.parse_headers_and_body(io) do |headers, body|
-          request = Types::Request.from_json(body) if body
+          request = Types::Message.from_json(body) if body
         end
         raise "Invalid request" unless request
         new(request)
       end
 
-      def initialize(@payload : Types::Request)
+      def initialize(@payload : Types::Message)
       end
 
       def inspect
@@ -51,7 +91,24 @@ module CRA
 
       @sockets = [] of Socket::Server
       @listening = false
-      @processor = Processor.new
+
+      @input = STDIN
+      @output = STDOUT
+
+      def initialize(processor : Processor | Nil = nil)
+        @sockets = [] of Socket::Server
+        @listening = false
+        @processor = processor || Processor.new(self)
+      end
+
+      def send(data)
+        body = data.to_json
+        @output.print "Content-Length: #{body.bytesize}\r\n"
+        @output.print "\r\n"
+        @output.print body
+      ensure
+        @output.flush
+      end
 
       def bind(server : Socket::Server)
         @sockets << server
@@ -71,12 +128,13 @@ module CRA
           loop do
             request = RPCRequest.from_io(input)
             Log.info { "Received request: #{request}" }
-            @processor.process(request.payload, output)
+            @processor.as(Processor).process(request.payload, output)
           rescue ex
             Log.error { "Error reading request from stdin: #{ex.message}" }
-            next
+            break
           end
         ensure
+          Log.info { "Shutting down stdin listener" }
           done.send(nil)
         end
 
@@ -107,3 +165,5 @@ module CRA
     end
   end
 end
+
+
