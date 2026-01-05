@@ -10,6 +10,7 @@ module CRA
 
   module JsonRPC
     class Processor
+      @workspace : Workspace? = nil
       def initialize(@server : Server)
       end
 
@@ -17,24 +18,28 @@ module CRA
         response : JSON::Serializable | Nil = handle(request)
         if response
           @server.send(response)
-          @
         end
       end
 
       def handle(request : Types::Message)
         Log.warn { "Unhandled request type: #{request.class}" }
-        Log.
-
         nil
       end
 
       def handle(request : Types::CompletionRequest)
         Log.error { "Handling completion request" }
+        @workspace.try do |ws|
+          return Types::Response.new(
+          request.id,
+          Types::CompletionList.new(
+            is_incomplete: false,
+            items: ws.complete(request)))
+        end
         Types::Response.new(
           request.id,
           Types::CompletionList.new(
             is_incomplete: false,
-            items: [Types::CompletionItem.new(label: "Test Completion")] of Types::CompletionItem))
+            items: [] of Types::CompletionItem))
       rescue ex
         Log.error { "Error handling request: #{ex.message}" }
         nil
@@ -45,11 +50,40 @@ module CRA
         nil
       end
 
+      def handle(request : Types::DocumentSymbolRequest)
+        Log.error { "Handling document symbol request" }
+        @workspace.try do |ws|
+          symbols = ws.indexer[request.text_document.uri]
+          Types::Response.new(
+            request.id,
+            symbols
+          )
+        end
+      rescue ex
+        Log.error { "Error : #{ex.message}" }
+        nil
+      end
+
+      def handle(request : Types::DefinitionRequest)
+        Log.error { "Handling definition request" }
+        @workspace.try do |ws|
+          locations = ws.find_definitions(request)
+          Types::Response.new(
+            request.id,
+            locations
+          )
+        end
+      end
+
       def handle(request : Types::InitializeRequest)
         Log.error { "Handling initialize request" }
+        request.root_uri.try do |uri|
+          @workspace = Workspace.from_s(uri)
+          @workspace.try &.scan
+        end
         Types::Response.new(request.id, Types::InitializeResult.new(
           capabilities: Types::ServerCapabilities.new(
-            document_symbol_provider: true,
+            document_symbol_provider: false,
             definition_provider: true,
             references_provider: true,
             workspace_symbol_provider: true,
@@ -81,9 +115,6 @@ module CRA
       def initialize(@payload : Types::Message)
       end
 
-      def inspect
-        "#<#{self.class}: #{@jsonrpc}, #{@id}, #{@method}>"
-      end
     end
 
     class Server
@@ -106,6 +137,7 @@ module CRA
         @output.print "Content-Length: #{body.bytesize}\r\n"
         @output.print "\r\n"
         @output.print body
+        Log.info { "Sent response: #{body}" }
       ensure
         @output.flush
       end
@@ -114,6 +146,8 @@ module CRA
         @sockets << server
         puts "Server bound to #{server}"
       end
+
+
 
       def listen
         ::Log.setup(backend: ::Log::IOBackend.new(io: STDERR))
@@ -127,7 +161,7 @@ module CRA
 
           loop do
             request = RPCRequest.from_io(input)
-            Log.info { "Received request: #{request}" }
+            Log.info { "Received request: #{request.payload.to_json}" }
             @processor.as(Processor).process(request.payload, output)
           rescue ex
             Log.error { "Error reading request from stdin: #{ex.message}" }

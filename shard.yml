@@ -8,6 +8,12 @@ targets:
   cr-analyzer:
     main: src/bin/cra.cr
 
+dependencies:
+  markd:
+    github: icyleaf/markd
+  reply:
+    github: I3oris/reply
+
 crystal: ">= 1.18.2"
 
 license: MIT

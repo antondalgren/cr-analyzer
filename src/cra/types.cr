@@ -12,6 +12,26 @@ module CRA
     alias SymbolInformations = Array(SymbolInformation)
     alias TextEdits = Array(TextEdit | AnnotatedTextEdit | SnippetTextEdit)
 
+    # ---- Completion trigger kinds ----
+
+    enum CompletionTriggerKind : Int32
+      Invoked = 1
+      TriggerCharacter = 2
+      TriggerForIncompleteCompletions = 3
+    end
+
+    # LSP sends trigger kinds as integers; use a converter so JSON::Serializable
+    # accepts the numeric representation instead of expecting enum names.
+    module CompletionTriggerKindConverter
+      def self.from_json(pull : JSON::PullParser)
+        CompletionTriggerKind.from_value(pull.read_int.to_i32)
+      end
+
+      def self.to_json(value : CompletionTriggerKind, json : JSON::Builder)
+        json.number(value.to_i)
+      end
+    end
+
     module ErrorCodes
       ERROR_CODE_INVALID_REQUEST  = -32600
       ERROR_CODE_METHOD_NOT_FOUND = -32601
@@ -96,6 +116,15 @@ module CRA
         "textDocument/diagnostic"   => DocumentDiagnosticRequest,
         "workspace/diagnostic"      => WorkspaceDiagnosticRequest,
         "window/showMessageRequest" => ShowMessageRequest,
+        "exit"                      => ExitNotification,
+        "textDocument/didOpen"      => DidOpenTextDocumentNotification,
+        "textDocument/didChange"    => DidChangeTextDocumentNotification,
+        "textDocument/didClose"     => DidCloseTextDocumentNotification,
+        "textDocument/didSave"      => DidSaveTextDocumentNotification,
+        "workspace/didChangeConfiguration" => DidChangeConfigurationNotification,
+        "workspace/didChangeWatchedFiles"  => DidChangeWatchedFilesNotification,
+        "window/showMessage"        => ShowMessageNotification,
+        "window/logMessage"         => LogMessageNotification,
         "$/cancelRequest"           => CancelRequestNotification,
         "$/setTrace"                => SetTraceNotification,
       }
@@ -2111,24 +2140,6 @@ module CRA
 
     # ---- Completion ----
 
-    enum CompletionTriggerKind : Int32
-      Invoked = 1
-      TriggerCharacter = 2
-      TriggerForIncompleteCompletions = 3
-    end
-
-    # LSP sends trigger kinds as integers; use a converter so JSON::Serializable
-    # accepts the numeric representation instead of expecting enum names.
-    module CompletionTriggerKindConverter
-      def self.from_json(pull : JSON::PullParser)
-        CompletionTriggerKind.from_value(pull.read_int.to_i32)
-      end
-
-      def self.to_json(value : CompletionTriggerKind, json : JSON::Builder)
-        json.number(value.to_i)
-      end
-    end
-
     enum CompletionItemKind : Int32
       Text = 1
       Method = 2
@@ -2239,7 +2250,7 @@ module CRA
     class CompletionContext
       include JSON::Serializable
 
-      @[JSON::Field(key: "triggerKind", converter: CompletionTriggerKindConverter)]
+      @[JSON::Field(key: "triggerKind", converter: ::CRA::Types::CompletionTriggerKindConverter)]
       property trigger_kind : CompletionTriggerKind
 
       @[JSON::Field(key: "triggerCharacter")]
@@ -3030,9 +3041,9 @@ module CRA
 
     class DidChangeConfigurationNotification < Notification
       @[JSON::Field(nested: "params")]
-      property params_data : DidChangeConfigurationParams
+      property params_data : DidChangeConfigurationParams? = nil
 
-      def initialize(@params_data : DidChangeConfigurationParams)
+      def initialize(@params_data : DidChangeConfigurationParams? = nil)
         @method = "workspace/didChangeConfiguration"
       end
     end
@@ -3045,9 +3056,9 @@ module CRA
 
     class DidChangeWatchedFilesNotification < Notification
       @[JSON::Field(nested: "params")]
-      property params_data : DidChangeWatchedFilesParams
+      property params_data : DidChangeWatchedFilesParams? = nil
 
-      def initialize(@params_data : DidChangeWatchedFilesParams)
+      def initialize(@params_data : DidChangeWatchedFilesParams? = nil)
         @method = "workspace/didChangeWatchedFiles"
       end
     end
