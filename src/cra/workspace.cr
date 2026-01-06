@@ -67,48 +67,107 @@ module CRA
     end
 
     def visit(node : Crystal::ASTNode) : Bool
-      return false unless contains?(node)
+      return false unless traversable?(node)
       @stack << node
-      @node = node
-      @node_path = @stack.dup
+      if hits?(node)
+        @node = node
+        @node_path = @stack.dup
+      end
       node.accept_children(self)
       @stack.pop
       false
     end
 
     def enclosing_type_name : String?
-      @node_path.reverse_each do |node|
-        case node
-        when Crystal::ClassDef
-          return node.name.full
-        when Crystal::ModuleDef
-          return node.name.full
+      names = [] of String
+      @node_path.each do |node|
+        type_name = case node
+                    when Crystal::ClassDef
+                      node.name.full
+                    when Crystal::ModuleDef
+                      node.name.full
+                    when Crystal::EnumDef
+                      node.name.full
+                    else
+                      nil
+                    end
+        next unless type_name
+
+        if type_name.includes?("::")
+          names = [type_name]
+        else
+          names << type_name
         end
+      end
+      return nil if names.empty?
+      names.join("::")
+    end
+
+    def enclosing_def : Crystal::Def?
+      @node_path.reverse_each do |node|
+        return node if node.is_a?(Crystal::Def)
       end
       nil
     end
 
-    private def contains?(node : Crystal::ASTNode) : Bool
-      return false unless node.location
+    def enclosing_class : Crystal::ClassDef?
+      @node_path.reverse_each do |node|
+        return node if node.is_a?(Crystal::ClassDef)
+      end
+      nil
+    end
+
+    def cursor_location : Crystal::Location
+      @location
+    end
+
+    private def traversable?(node : Crystal::ASTNode) : Bool
+      return true if node.is_a?(Crystal::When)
+      return true unless node.location
 
       loc = node.location.as(Crystal::Location)
 
-      @location = Crystal::Location.new(
+      if node.end_location.nil?
+        return true
+      end
+
+      position_in?(loc, node.end_location.as(Crystal::Location))
+    end
+
+    private def hits?(node : Crystal::ASTNode) : Bool
+      if range = name_range(node)
+        return true if position_in?(range[:start], range[:end])
+      end
+
+      if node.location && node.end_location
+        return position_in?(node.location.as(Crystal::Location), node.end_location.as(Crystal::Location))
+      end
+
+      false
+    end
+
+    private def name_range(node : Crystal::ASTNode) : {start: Crystal::Location, end: Crystal::Location}?
+      loc = node.name_location || node.location
+      return nil unless loc
+
+      size = node.name_size
+      return nil if size <= 0
+
+      end_loc = Crystal::Location.new(
         filename: loc.filename,
+        line_number: loc.line_number,
+        column_number: loc.column_number + size - 1
+      )
+      {start: loc, end: end_loc}
+    end
+
+    private def position_in?(start_loc : Crystal::Location, end_loc : Crystal::Location) : Bool
+      @location = Crystal::Location.new(
+        filename: start_loc.filename,
         line_number: @location.line_number,
         column_number: @location.column_number
       )
-      if node.end_location.nil?
-        end_loc = Crystal::Location.new(
-          filename: loc.filename,
-          line_number: loc.line_number,
-          column_number: loc.column_number + node.name_size
-        )
-      else
-        end_loc = node.end_location.as(Crystal::Location)
-      end
-
-      @location.between?(loc, end_loc)
+      @location.between?(start_loc, end_loc)
     end
 
   end
@@ -327,7 +386,7 @@ module CRA
         @analyzer.enter("file://#{file_path}")
 
         program.accept(indexer)
-        program.accept(@analyzer)
+        @analyzer.index(program)
 
       rescue ex : Exception
         Log.error { "Error parsing #{file_path}: #{ex.message}" }
@@ -353,7 +412,14 @@ module CRA
         node.try do |n|
           Log.info { "Finding definitions for node: #{n.class} at #{n.location.inspect}" }
           locations = [] of Types::Location
-          @analyzer.find_definitions(n, finder.enclosing_type_name).each do |def_node|
+          @analyzer.find_definitions(
+            n,
+            finder.enclosing_type_name,
+            finder.enclosing_def,
+            finder.enclosing_class,
+            finder.cursor_location,
+            request.text_document.uri
+          ).each do |def_node|
             def_loc = def_node.location
             def_file = def_node.file
             next unless def_loc && def_file

@@ -5,6 +5,18 @@ require "./macro_interpreter"
 module CRA
   module Analysis
     class MacroExpander
+      # Expand supported built-in macros (getter/setter/property/record).
+      def self.expand_builtin(node : Crystal::Call, file_uri : String) : {String, String}?
+        case node.name
+        when "property", "getter", "setter"
+          expand_accessor(node, file_uri)
+        when "record"
+          expand_record(node, file_uri)
+        else
+          nil
+        end
+      end
+
       # Returns a tuple of (Virtual URI, Content) if the call is a supported macro
       def self.expand(node : Crystal::Call, file_uri : String, database : Database, scope : ContainerSymbol) : {String, String}?
         # 1. Try to find user-defined macro
@@ -27,14 +39,7 @@ module CRA
         end
 
         # 2. Fallback to built-in hardcoded macros (if not found in DB)
-        case node.name
-        when "property", "getter", "setter"
-          expand_accessor(node, file_uri)
-        when "record"
-          expand_record(node, file_uri)
-        else
-          nil
-        end
+        expand_builtin(node, file_uri)
       end
 
       private def self.find_macro(name : String, scope : Symbol, database : Database) : MacroSymbol?
@@ -178,5 +183,4 @@ module CRA
     end
   end
 end
-
 

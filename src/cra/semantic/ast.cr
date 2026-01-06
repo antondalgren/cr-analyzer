@@ -41,12 +41,12 @@ module CRA
       getter instance_vars : Array(InstanceVar)
       getter class_vars : Array(ClassVar)
       getter includes : Array(Module)
-      getter owner : Module | Class | Nil
+      getter owner : PsiElement | Nil
 
       def initialize(
         @file : String?,
         @name : String,
-        @owner : Module | Class | Nil,
+        @owner : PsiElement | Nil,
         @parent : Class? = nil,
         @methods : Array(Method) = [] of Method,
         @instance_vars : Array(InstanceVar) = [] of InstanceVar,
@@ -59,12 +59,18 @@ module CRA
     class Method < PsiElement
       getter return_type : String
       getter parameters : Array(String)
-      getter owner : Module | Class | Nil
+      getter min_arity : Int32
+      getter max_arity : Int32?
+      getter class_method : Bool
+      getter owner : PsiElement | Nil
       def initialize(
         @file : String?,
         @name : String,
         @return_type : String,
-        @owner : Module | Class | Nil,
+        @min_arity : Int32,
+        @max_arity : Int32?,
+        @class_method : Bool,
+        @owner : PsiElement | Nil,
         @parameters : Array(String) = [] of String,
         @location : Location? = nil)
       end
@@ -81,6 +87,33 @@ module CRA
       getter type : String
       getter owner : Class
       def initialize(@file : String?, @name : String, @type : String, @owner : Class, @location : Location? = nil)
+      end
+    end
+
+    class Enum < PsiElement
+      getter members : Array(EnumMember)
+      getter methods : Array(Method)
+      getter owner : PsiElement | Nil
+
+      def initialize(
+        @file : String?,
+        @name : String,
+        @members : Array(EnumMember) = [] of EnumMember,
+        @methods : Array(Method) = [] of Method,
+        @owner : PsiElement | Nil = nil,
+        @location : Location? = nil)
+      end
+    end
+
+    class EnumMember < PsiElement
+      getter owner : Enum
+      def initialize(@file : String?, @name : String, @owner : Enum, @location : Location? = nil)
+      end
+    end
+
+    class LocalVar < PsiElement
+      getter owner : PsiElement | Nil
+      def initialize(@file : String?, @name : String, @owner : PsiElement | Nil = nil, @location : Location? = nil)
       end
     end
 
