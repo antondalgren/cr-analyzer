@@ -66,6 +66,7 @@ The server uses CRYSTAL_PATH or CRYSTAL_HOME to locate the stdlib. If unset it f
 - docs/architecture.md
 - docs/semantic-index.md
 - docs/lsp-server.md
+- docs/roadmap.md
 
 ## Contributing
 

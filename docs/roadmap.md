@@ -1,0 +1,49 @@
+# LSP Feature Roadmap
+
+Legend:
+- [x] Implemented
+- [~] Partial
+- [ ] Planned
+
+- [ ] Go to Declaration
+- [x] Go to Definition
+- [ ] Go to Type Definition
+- [ ] Go to Implementation
+- [ ] Find References
+- [ ] Prepare Call Hierarchy
+- [ ] Call Hierarchy Incoming Calls
+- [ ] Call Hierarchy Outgoing Calls
+- [ ] Prepare Type Hierarchy
+- [ ] Type Hierarchy Super Types
+- [ ] Type Hierarchy Sub Types
+- [ ] Document Highlight
+- [ ] Document Link
+- [ ] Document Link Resolve
+- [ ] Hover
+- [ ] Code Lens
+- [ ] Code Lens Refresh
+- [ ] Folding Range
+- [ ] Selection Range
+- [~] Document Symbols (index exists, not advertised yet)
+- [ ] Semantic Tokens
+- [ ] Inline Value
+- [ ] Inline Value Refresh
+- [ ] Inlay Hint
+- [ ] Inlay Hint Resolve
+- [ ] Inlay Hint Refresh
+- [ ] Moniker
+- [x] Completion Proposals
+- [ ] Completion Item Resolve
+- [ ] Publish Diagnostics
+- [ ] Pull Diagnostics
+- [ ] Signature Help
+- [ ] Code Action
+- [ ] Code Action Resolve
+- [ ] Document Color
+- [ ] Color Presentation
+- [ ] Formatting
+- [ ] Range Formatting
+- [ ] On type Formatting
+- [ ] Rename
+- [ ] Prepare Rename
+- [ ] Linked Editing Range
