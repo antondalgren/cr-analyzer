@@ -11,6 +11,7 @@ module CRA
   module JsonRPC
     class Processor
       @workspace : Workspace? = nil
+      @client_capabilities : Types::ClientCapabilities? = nil
       def initialize(@server : Server)
       end
 
@@ -111,7 +112,7 @@ module CRA
       def handle(request : Types::DocumentSymbolRequest)
         Log.error { "Handling document symbol request" }
         @workspace.try do |ws|
-          symbols = ws.indexer[request.text_document.uri]
+          symbols = ws.indexer.symbol_informations(request.text_document.uri)
           Types::Response.new(
             request.id,
             symbols
@@ -120,6 +121,41 @@ module CRA
       rescue ex
         Log.error { "Error : #{ex.message}" }
         nil
+      end
+
+      def handle(request : Types::RenameRequest)
+        Log.error { "Handling rename request" }
+        @workspace.try do |ws|
+          edit = ws.rename(request)
+          return Types::Response.new(request.id, edit) if edit
+        end
+        Types::Response.new(request.id, nil)
+      rescue ex
+        Log.error { "Error handling request: #{ex.message}" }
+        nil
+      end
+
+      def handle(request : Types::PrepareRenameRequest)
+        Log.error { "Handling prepare rename request" }
+        @workspace.try do |ws|
+          range = ws.prepare_rename(request)
+          return Types::Response.new(request.id, range) if range
+        end
+        Types::Response.new(request.id, nil)
+      rescue ex
+        Log.error { "Error handling request: #{ex.message}" }
+        nil
+      end
+
+      def handle(request : Types::DeclarationRequest)
+        Log.error { "Handling declaration request" }
+        @workspace.try do |ws|
+          locations = ws.find_declarations(request)
+          Types::Response.new(
+            request.id,
+            locations
+          )
+        end
       end
 
       def handle(request : Types::DefinitionRequest)
@@ -131,6 +167,40 @@ module CRA
             locations
           )
         end
+      end
+
+      def handle(request : Types::TypeDefinitionRequest)
+        Log.error { "Handling type definition request" }
+        @workspace.try do |ws|
+          locations = ws.find_type_definitions(request)
+          Types::Response.new(
+            request.id,
+            locations
+          )
+        end
+      end
+
+      def handle(request : Types::ImplementationRequest)
+        Log.error { "Handling implementation request" }
+        @workspace.try do |ws|
+          locations = ws.find_implementations(request)
+          Types::Response.new(
+            request.id,
+            locations
+          )
+        end
+      end
+
+      def handle(request : Types::InlineValueRequest)
+        Log.error { "Handling inline value request" }
+        @workspace.try do |ws|
+          values = ws.inline_values(request)
+          return Types::Response.new(request.id, values)
+        end
+        Types::Response.new(request.id, [] of Types::InlineValue)
+      rescue ex
+        Log.error { "Error handling request: #{ex.message}" }
+        nil
       end
 
       def handle(request : Types::DidOpenTextDocumentNotification)
@@ -196,6 +266,7 @@ module CRA
 
       def handle(request : Types::InitializeRequest)
         Log.error { "Handling initialize request" }
+        @client_capabilities = request.capabilities
         request.root_uri.try do |uri|
           @workspace = Workspace.from_s(uri)
           @workspace.try &.scan
@@ -208,6 +279,7 @@ module CRA
               save: Types::SaveOptions.new(include_text: true)
             ),
             document_symbol_provider: true,
+            declaration_provider: true,
             definition_provider: true,
             hover_provider: true,
             references_provider: true,
@@ -218,15 +290,17 @@ module CRA
             document_highlight_provider: true,
             document_formatting_provider: false,
             document_range_formatting_provider: false,
-            rename_provider: true,
+            rename_provider: Types::RenameOptions.new(prepare_provider: true),
             completion_provider: Types::CompletionOptions.new(resolve_provider: true, trigger_characters: [".", ":", "@", "#", "<", "\"", "'", "/", " "]),
-            selection_range_provider: true
+            selection_range_provider: true,
+            inline_value_provider: true
           )
         ))
       rescue ex
         Log.error { "Error handling request: #{ex.message}" }
         nil
       end
+
     end
 
     class RPCRequest

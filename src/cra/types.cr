@@ -13,6 +13,7 @@ module CRA
     alias DocumentHighlights = Array(DocumentHighlight)
     alias SelectionRanges = Array(SelectionRange)
     alias TextEdits = Array(TextEdit | AnnotatedTextEdit | SnippetTextEdit)
+    alias InlineValues = Array(InlineValue)
 
     # ---- Completion trigger kinds ----
 
@@ -49,6 +50,44 @@ module CRA
       end
 
       def self.to_json(value : CompletionItemKind, json : JSON::Builder)
+        json.number(value.to_i)
+      end
+    end
+
+    # Insert text formats are numeric in LSP; accept both ints and strings.
+    module InsertTextFormatConverter
+      def self.from_json(pull : JSON::PullParser)
+        case pull.kind
+        when JSON::PullParser::Kind::Int
+          InsertTextFormat.from_value(pull.read_int.to_i32)
+        when JSON::PullParser::Kind::String
+          InsertTextFormat.parse(pull.read_string)
+        else
+          pull.read_null
+          nil
+        end
+      end
+
+      def self.to_json(value : InsertTextFormat, json : JSON::Builder)
+        json.number(value.to_i)
+      end
+    end
+
+    # Insert text modes are numeric in LSP; accept both ints and strings.
+    module InsertTextModeConverter
+      def self.from_json(pull : JSON::PullParser)
+        case pull.kind
+        when JSON::PullParser::Kind::Int
+          InsertTextMode.from_value(pull.read_int.to_i32)
+        when JSON::PullParser::Kind::String
+          InsertTextMode.parse(pull.read_string)
+        else
+          pull.read_null
+          nil
+        end
+      end
+
+      def self.to_json(value : InsertTextMode, json : JSON::Builder)
         json.number(value.to_i)
       end
     end
@@ -130,7 +169,12 @@ module CRA
         "textDocument/signatureHelp" => SignatureHelpRequest,
         "textDocument/documentHighlight" => DocumentHighlightRequest,
         "textDocument/selectionRange" => SelectionRangeRequest,
+        "textDocument/prepareRename" => PrepareRenameRequest,
+        "textDocument/inlineValue"  => InlineValueRequest,
+        "textDocument/declaration"  => DeclarationRequest,
         "textDocument/definition"   => DefinitionRequest,
+        "textDocument/typeDefinition" => TypeDefinitionRequest,
+        "textDocument/implementation" => ImplementationRequest,
         "textDocument/references"   => ReferencesRequest,
         "textDocument/documentSymbol" => DocumentSymbolRequest,
         "workspace/symbol"          => WorkspaceSymbolRequest,
@@ -212,13 +256,13 @@ module CRA
     # results are captured via JSON::Any.
     alias DefinitionResult = Location | Locations | LocationLinks
     alias ReferencesResult = Array(Location)
-    alias ResponseResult = InitializeResult | CompletionList | CompletionItem | Hover | SignatureHelp | DefinitionResult | ReferencesResult | DocumentSymbols | SymbolInformations | DocumentHighlights | SelectionRanges | WorkspaceEdit | TextEdits | DocumentDiagnosticReport | WorkspaceDiagnosticReport | MessageActionItem | JSON::Any
+    alias ResponseResult = InitializeResult | CompletionList | CompletionItem | Hover | SignatureHelp | DefinitionResult | ReferencesResult | DocumentSymbols | SymbolInformations | DocumentHighlights | SelectionRanges | InlineValues | Range | WorkspaceEdit | TextEdits | DocumentDiagnosticReport | WorkspaceDiagnosticReport | MessageActionItem | JSON::Any
 
     class Response < Message
       include JSON::Serializable
 
       property id : IntegerOrString | Nil
-      @[JSON::Field(key: "result")]
+      @[JSON::Field(key: "result", emit_null: true)]
       property result : ResponseResult?
       @[JSON::Field(key: "error")]
       property error : ResponseError?
@@ -808,6 +852,8 @@ module CRA
       property did_change_workspace_folders : Bool?
       @[JSON::Field(key: "workspaceFolders")]
       property workspace_folders : Bool?
+      @[JSON::Field(key: "inlineValue")]
+      property inline_value : InlineValueWorkspaceClientCapabilities?
       @[JSON::Field(key: "fileOperations")]
       property file_operations : WorkspaceFileOperationsClientCapabilities?
 
@@ -818,8 +864,19 @@ module CRA
         @did_change_configuration : DidChangeConfigurationClientCapabilities | Bool | Nil = nil,
         @did_change_workspace_folders : Bool? = nil,
         @workspace_folders : Bool? = nil,
+        @inline_value : InlineValueWorkspaceClientCapabilities? = nil,
         @file_operations : WorkspaceFileOperationsClientCapabilities? = nil
       )
+      end
+    end
+
+    class InlineValueWorkspaceClientCapabilities
+      include JSON::Serializable
+
+      @[JSON::Field(key: "refreshSupport")]
+      property refresh_support : Bool?
+
+      def initialize(@refresh_support : Bool? = nil)
       end
     end
 
@@ -2062,6 +2119,8 @@ module CRA
       property completion_provider : CompletionOptions?
       @[JSON::Field(key: "hoverProvider")]
       property hover_provider : Bool | HoverOptions | Nil
+      @[JSON::Field(key: "declarationProvider")]
+      property declaration_provider : Bool?
       @[JSON::Field(key: "definitionProvider")]
       property definition_provider : Bool?
       @[JSON::Field(key: "referencesProvider")]
@@ -2123,6 +2182,7 @@ module CRA
       def initialize(@text_document_sync : TextDocumentSyncOptions | TextDocumentSyncKind | Nil = nil,
                      @completion_provider : CompletionOptions? = nil,
                      @hover_provider : Bool | HoverOptions | Nil = nil,
+                     @declaration_provider : Bool? = nil,
                      @definition_provider : Bool? = nil,
                      @references_provider : Bool? = nil,
                      @document_symbol_provider : Bool? = nil,
@@ -2264,9 +2324,9 @@ module CRA
       property commit_characters : Array(String)?
       @[JSON::Field(key: "editRange")]
       property edit_range : Range | EditRangeWithInsertReplace | Nil
-      @[JSON::Field(key: "insertTextFormat")]
+      @[JSON::Field(key: "insertTextFormat", converter: ::CRA::Types::InsertTextFormatConverter)]
       property insert_text_format : InsertTextFormat?
-      @[JSON::Field(key: "insertTextMode")]
+      @[JSON::Field(key: "insertTextMode", converter: ::CRA::Types::InsertTextModeConverter)]
       property insert_text_mode : InsertTextMode?
       property data : JSON::Any?
 
@@ -2319,10 +2379,10 @@ module CRA
       @[JSON::Field(key: "insertText")]
       property insert_text : String?
 
-      @[JSON::Field(key: "insertTextFormat")]
+      @[JSON::Field(key: "insertTextFormat", converter: ::CRA::Types::InsertTextFormatConverter)]
       property insert_text_format : InsertTextFormat?
 
-      @[JSON::Field(key: "insertTextMode")]
+      @[JSON::Field(key: "insertTextMode", converter: ::CRA::Types::InsertTextModeConverter)]
       property insert_text_mode : InsertTextMode?
 
       @[JSON::Field(key: "textEdit")]
@@ -2910,12 +2970,62 @@ module CRA
       property positions : Array(Position)
     end
 
+    class InlineValueRequest < Request
+      @[JSON::Field(nested: "params", key: "textDocument")]
+      property text_document : TextDocumentIdentifier
+
+      @[JSON::Field(nested: "params", key: "range")]
+      property range : Range
+
+      @[JSON::Field(nested: "params", key: "context")]
+      property context : InlineValueContext
+    end
+
+    class PrepareRenameRequest < Request
+      @[JSON::Field(nested: "params", key: "textDocument")]
+      property text_document : TextDocumentIdentifier
+
+      @[JSON::Field(nested: "params", key: "position")]
+      property position : Position
+    end
+
+    class DeclarationRequest < Request
+      @[JSON::Field(nested: "params", key: "textDocument")]
+      property text_document : TextDocumentIdentifier
+
+      @[JSON::Field(nested: "params", key: "position")]
+      property position : Position
+    end
+
     class DefinitionRequest < Request
       @[JSON::Field(nested: "params", key: "textDocument")]
       property text_document : TextDocumentIdentifier
 
       @[JSON::Field(nested: "params", key: "position")]
       property position : Position
+    end
+
+    class TypeDefinitionRequest < Request
+      @[JSON::Field(nested: "params", key: "textDocument")]
+      property text_document : TextDocumentIdentifier
+
+      @[JSON::Field(nested: "params", key: "position")]
+      property position : Position
+    end
+
+    class ImplementationRequest < Request
+      @[JSON::Field(nested: "params", key: "textDocument")]
+      property text_document : TextDocumentIdentifier
+
+      @[JSON::Field(nested: "params", key: "position")]
+      property position : Position
+    end
+
+    # Server -> client refresh request.
+    class InlineValueRefreshRequest < Request
+      def initialize(@id : IntegerOrString)
+        @method = "workspace/inlineValue/refresh"
+      end
     end
 
     class ReferenceContext

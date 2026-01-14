@@ -50,6 +50,11 @@ module CRA::Psi
           if resolved = resolve_type_node(super_node, owner_name)
             results.concat(find_methods_with_ancestors(resolved, name, class_method, visited))
           end
+        else
+          # Crystal classes implicitly inherit from Reference/Object; pull their methods when no explicit superclass is set.
+          if default_super = find_type("Reference") || find_type("Object")
+            results.concat(find_methods_with_ancestors(default_super, name, class_method, visited))
+          end
         end
       when CRA::Psi::Module
         if class_method != true
@@ -205,6 +210,253 @@ module CRA::Psi
         end
       end
       results
+    end
+
+    # Declaration is currently the same as definition for the lightweight index.
+    def find_declarations(
+      node : Crystal::ASTNode,
+      context : String? = nil,
+      scope_def : Crystal::Def? = nil,
+      scope_class : Crystal::ClassDef? = nil,
+      cursor : Crystal::Location? = nil,
+      current_file : String? = nil
+    ) : Array(PsiElement)
+      find_definitions(node, context, scope_def, scope_class, cursor, current_file)
+    end
+
+    # Resolves type definitions for variables/calls based on lightweight inference.
+    def find_type_definitions(
+      node : Crystal::ASTNode,
+      context : String? = nil,
+      scope_def : Crystal::Def? = nil,
+      scope_class : Crystal::ClassDef? = nil,
+      cursor : Crystal::Location? = nil,
+      current_file : String? = nil
+    ) : Array(PsiElement)
+      if node.is_a?(Crystal::Path)
+        if member = resolve_enum_member(node, context)
+          return type_definition_elements(member.owner.name)
+        end
+      end
+
+      type_refs = type_refs_for_node(node, context, scope_def, scope_class, cursor)
+      return [] of PsiElement if type_refs.empty?
+
+      results = [] of PsiElement
+      type_refs.each do |type_ref|
+        results.concat(type_definition_elements_for(type_ref, context, current_file))
+      end
+      results
+    end
+
+    # Finds implementations of types/methods via includes and subclass relationships.
+    def find_implementations(
+      node : Crystal::ASTNode,
+      context : String? = nil,
+      scope_def : Crystal::Def? = nil,
+      scope_class : Crystal::ClassDef? = nil,
+      cursor : Crystal::Location? = nil,
+      current_file : String? = nil
+    ) : Array(PsiElement)
+      case node
+      when Crystal::Path, Crystal::Generic, Crystal::Metaclass
+        if resolved = resolve_type_node(node, context)
+          return implementers_for_type(resolved)
+        end
+      end
+
+      results = [] of PsiElement
+      definitions = find_definitions(node, context, scope_def, scope_class, cursor, current_file)
+      call = node.as?(Crystal::Call)
+      definitions.each do |definition|
+        case definition
+        when Method
+          results.concat(method_implementations(definition, call))
+        when Class, Module
+          results.concat(implementers_for_type(definition))
+        end
+      end
+      results
+    end
+
+    private def type_refs_for_node(
+      node : Crystal::ASTNode,
+      context : String?,
+      scope_def : Crystal::Def?,
+      scope_class : Crystal::ClassDef?,
+      cursor : Crystal::Location?
+    ) : Array(TypeRef)
+      refs = [] of TypeRef
+      case node
+      when Crystal::Def
+        if return_type = node.return_type
+          if type_ref = type_ref_from_type(return_type)
+            refs << type_ref
+          end
+        end
+      when Crystal::Arg
+        if restriction = node.restriction
+          if type_ref = type_ref_from_type(restriction)
+            refs << type_ref
+          end
+        end
+      when Crystal::TypeDeclaration
+        if type_ref = type_ref_from_type(node.declared_type)
+          refs << type_ref
+        end
+      end
+
+      if refs.empty?
+        if type_ref = infer_type_ref(node, context, scope_def, scope_class, cursor)
+          refs << type_ref
+        end
+      end
+
+      flattened = [] of TypeRef
+      refs.each { |ref| collect_type_refs(ref, flattened) }
+      flattened
+    end
+
+    private def collect_type_refs(type_ref : TypeRef, results : Array(TypeRef))
+      if type_ref.union?
+        type_ref.union_types.each do |member|
+          next if nil_type?(member)
+          collect_type_refs(member, results)
+        end
+        return
+      end
+      results << type_ref
+    end
+
+    private def type_definition_elements_for(
+      type_ref : TypeRef,
+      context : String?,
+      current_file : String?,
+      depth : Int32 = 0
+    ) : Array(PsiElement)
+      return [] of PsiElement if depth > 6
+
+      if type_ref.union?
+        results = [] of PsiElement
+        type_ref.union_types.each do |member|
+          next if nil_type?(member)
+          results.concat(type_definition_elements_for(member, context, current_file, depth + 1))
+        end
+        return results
+      end
+
+      name = type_ref.name
+      return [] of PsiElement unless name
+      name = context if name == "self" && context
+
+      if resolved = resolve_type_name(name, context)
+        defs = type_definition_elements(resolved.name)
+        return defs.empty? ? [resolved] : defs
+      end
+
+      if alias_def = resolve_alias_in_context(name, context, current_file)
+        if target = alias_def.target
+          return type_definition_elements_for(target, context, current_file, depth + 1)
+        end
+        results = [] of PsiElement
+        results << alias_def
+        return results
+      end
+
+      [] of PsiElement
+    end
+
+    private def method_implementations(method : Method, call : Crystal::Call? = nil) : Array(Method)
+      owner = method.owner
+      return [] of Method unless owner
+
+      results = [] of Method
+      implementers_for_type(owner).each do |implementer|
+        next unless implementer.is_a?(CRA::Psi::Module) || implementer.is_a?(CRA::Psi::Class) || implementer.is_a?(CRA::Psi::Enum)
+        candidates = find_methods_in(implementer, method.name, method.class_method)
+        candidates = filter_methods_by_arity(candidates, call) if call
+        results.concat(candidates)
+      end
+      results
+    end
+
+    private def implementers_for_type(type : PsiElement) : Array(PsiElement)
+      case type
+      when Class
+        subclasses_for(type.name)
+      when Module
+        includers_for(type.name)
+      else
+        [] of PsiElement
+      end
+    end
+
+    private def subclasses_for(name : String) : Array(PsiElement)
+      results = [] of PsiElement
+      seen = {} of String => Bool
+      queue = [name]
+      idx = 0
+
+      while idx < queue.size
+        current = queue[idx]
+        idx += 1
+        @class_superclass.each do |child_name, super_node|
+          next if seen[child_name]?
+          resolved = resolve_type_node(super_node, child_name)
+          next unless resolved && resolved.name == current
+
+          if child = find_class(child_name)
+            results << child
+            seen[child_name] = true
+            queue << child.name
+          end
+        end
+      end
+      results
+    end
+
+    private def includers_for(name : String) : Array(PsiElement)
+      results = [] of PsiElement
+      seen = {} of String => Bool
+      queue = [name]
+      idx = 0
+
+      while idx < queue.size
+        current = queue[idx]
+        idx += 1
+
+        @module_includes.each do |owner_name, includes|
+          next if seen[owner_name]?
+          next unless includes_type?(includes, owner_name, current)
+          if mod = find_module(owner_name)
+            results << mod
+            seen[owner_name] = true
+            queue << mod.name
+          end
+        end
+
+        @class_includes.each do |owner_name, includes|
+          next if seen[owner_name]?
+          next unless includes_type?(includes, owner_name, current)
+          if cls = find_class(owner_name)
+            results << cls
+            seen[owner_name] = true
+          end
+        end
+      end
+
+      results
+    end
+
+    private def includes_type?(
+      includes : Array(Crystal::ASTNode),
+      owner_name : String,
+      target_name : String
+    ) : Bool
+      includes.any? do |inc|
+        resolved = resolve_type_node(inc, owner_name)
+        resolved && resolved.name == target_name
+      end
     end
 
     def signature_help_methods(

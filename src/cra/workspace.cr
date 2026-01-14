@@ -10,6 +10,7 @@ require "./workspace/document"
 require "./workspace/document_symbols_index"
 require "./workspace/keyword_completion_provider"
 require "./workspace/require_path_completion_provider"
+require "./workspace/rename"
 
 module CRA
   class Workspace
@@ -226,28 +227,78 @@ module CRA
         node = finder.node
         node.try do |n|
           Log.info { "Finding definitions for node: #{n.class} at #{n.location.inspect}" }
-          locations = [] of Types::Location
-          @analyzer.find_definitions(
+          definitions = @analyzer.find_definitions(
             n,
             finder.enclosing_type_name,
             finder.enclosing_def,
             finder.enclosing_class,
             finder.cursor_location,
             request.text_document.uri
-          ).each do |def_node|
-            def_loc = def_node.location
-            def_file = def_node.file
-            next unless def_loc && def_file
-            uri = def_file.starts_with?("file://") ? def_file : "file://#{def_file}"
-            locations << Types::Location.new(
-              uri: uri,
-              range: def_loc.to_range
-            )
-          end
-          return locations
+          )
+          return elements_to_locations(definitions)
         end
       end
       [] of Types::Location
+    end
+
+    def find_declarations(request : Types::DeclarationRequest) : Array(Types::Location)
+      document = document(request.text_document.uri)
+      return [] of Types::Location unless document
+
+      finder = document.node_context(request.position)
+      node = finder.node || finder.previous_node
+      return [] of Types::Location unless node
+
+      Log.info { "Finding declarations for node: #{node.class} at #{node.location.inspect}" }
+      declarations = @analyzer.find_declarations(
+        node,
+        finder.enclosing_type_name,
+        finder.enclosing_def,
+        finder.enclosing_class,
+        finder.cursor_location,
+        request.text_document.uri
+      )
+      elements_to_locations(declarations)
+    end
+
+    def find_type_definitions(request : Types::TypeDefinitionRequest) : Array(Types::Location)
+      document = document(request.text_document.uri)
+      return [] of Types::Location unless document
+
+      finder = document.node_context(request.position)
+      node = finder.node || finder.previous_node
+      return [] of Types::Location unless node
+
+      Log.info { "Finding type definitions for node: #{node.class} at #{node.location.inspect}" }
+      definitions = @analyzer.find_type_definitions(
+        node,
+        finder.enclosing_type_name,
+        finder.enclosing_def,
+        finder.enclosing_class,
+        finder.cursor_location,
+        request.text_document.uri
+      )
+      elements_to_locations(definitions)
+    end
+
+    def find_implementations(request : Types::ImplementationRequest) : Array(Types::Location)
+      document = document(request.text_document.uri)
+      return [] of Types::Location unless document
+
+      finder = document.node_context(request.position)
+      node = finder.node || finder.previous_node
+      return [] of Types::Location unless node
+
+      Log.info { "Finding implementations for node: #{node.class} at #{node.location.inspect}" }
+      implementations = @analyzer.find_implementations(
+        node,
+        finder.enclosing_type_name,
+        finder.enclosing_def,
+        finder.enclosing_class,
+        finder.cursor_location,
+        request.text_document.uri
+      )
+      elements_to_locations(implementations)
     end
 
     def hover(request : Types::HoverRequest) : Types::Hover?
@@ -346,6 +397,36 @@ module CRA
         finder = document.node_context(position)
         selection_range_for_path(finder.context_path, position)
       end
+    end
+
+    def inline_values(request : Types::InlineValueRequest) : Array(Types::InlineValue)
+      document = document(request.text_document.uri)
+      return [] of Types::InlineValue unless document
+      program = document.program
+      return [] of Types::InlineValue unless program
+
+      collector = InlineValueCollector.new(request.range)
+      program.accept(collector)
+      collector.values
+    end
+
+    private def elements_to_locations(elements : Array(Psi::PsiElement)) : Array(Types::Location)
+      locations = [] of Types::Location
+      seen = {} of String => Bool
+      elements.each do |def_node|
+        def_loc = def_node.location
+        def_file = def_node.file
+        next unless def_loc && def_file
+        uri = def_file.starts_with?("file://") ? def_file : "file://#{def_file}"
+        key = "#{uri}:#{def_loc.start_line}:#{def_loc.start_character}:#{def_loc.end_line}:#{def_loc.end_character}"
+        next if seen[key]?
+        seen[key] = true
+        locations << Types::Location.new(
+          uri: uri,
+          range: def_loc.to_range
+        )
+      end
+      locations
     end
 
     private def hover_contents(definitions : Array(Psi::PsiElement)) : JSON::Any
@@ -700,6 +781,78 @@ module CRA
         left.end_position.line == right.end_position.line &&
         left.end_position.character == right.end_position.character
     end
+
+    # Collects inline value variable lookups within a requested range.
+    private class InlineValueCollector < Crystal::Visitor
+      getter values : Array(Types::InlineValue)
+
+      def initialize(range : Types::Range)
+        @values = [] of Types::InlineValue
+        @seen = {} of String => Bool
+        @start_line = range.start_position.line
+        @start_char = range.start_position.character
+        @end_line = range.end_position.line
+        @end_char = range.end_position.character
+      end
+
+      def visit(node : Crystal::ASTNode) : Bool
+        true
+      end
+
+      def visit(node : Crystal::Var) : Bool
+        add_value(node.name, node)
+        true
+      end
+
+      def visit(node : Crystal::InstanceVar) : Bool
+        add_value(node.name, node)
+        true
+      end
+
+      def visit(node : Crystal::ClassVar) : Bool
+        add_value(node.name, node)
+        true
+      end
+
+      def visit(node : Crystal::Arg) : Bool
+        add_value(node.name, node)
+        true
+      end
+
+      private def add_value(name : String, node : Crystal::ASTNode)
+        return if name.empty?
+        loc = node.name_location || node.location
+        return unless loc
+
+        start_line = loc.line_number - 1
+        start_char = loc.column_number - 1
+        size = node.name_size
+        end_line = loc.line_number - 1
+        end_char = start_char + size
+
+        return unless overlaps_range?(start_line, start_char, end_line, end_char)
+
+        range = Types::Range.new(
+          start_position: Types::Position.new(line: start_line, character: start_char),
+          end_position: Types::Position.new(line: end_line, character: end_char)
+        )
+        key = "#{name}:#{start_line}:#{start_char}"
+        return if @seen[key]?
+        @seen[key] = true
+
+        @values << Types::InlineValueVariableLookup.new(
+          range: range,
+          case_sensitive_lookup: true,
+          variable_name: name
+        )
+      end
+
+      private def overlaps_range?(start_line : Int32, start_char : Int32, end_line : Int32, end_char : Int32) : Bool
+        after_end = start_line > @end_line || (start_line == @end_line && start_char > @end_char)
+        before_start = end_line < @start_line || (end_line == @start_line && end_char < @start_char)
+        !(after_end || before_start)
+      end
+    end
   end
 
   class LocalVarHighlightCollector < Crystal::Visitor
@@ -832,4 +985,5 @@ module CRA
       false
     end
   end
+
 end

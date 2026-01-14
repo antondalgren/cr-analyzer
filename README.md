@@ -4,29 +4,40 @@ cr-analyzer is a lightweight Language Server Protocol (LSP) server for the Cryst
 
 ## Status
 
-Active development. Implemented LSP features today: completion and go-to-definition, plus full-text document sync (didOpen/didChange/didSave). Other LSP features are planned.
+Active development. Implemented LSP features include completion (with resolve), go-to-declaration/definition/type definition/implementation, hover, signature help, document symbols, document highlight, selection range, rename (best-effort), and full-text document sync (didOpen/didChange/didSave). Other LSP features are planned.
 
 ## Features
 
 - Workspace scan of project sources, lib, and Crystal stdlib.
+- Go to declaration (best-effort; currently mirrors go-to-definition).
 - Go to definition for:
   - types (class/module/enum)
   - methods and overloads (arity aware)
   - constructors (new -> initialize/self.new)
   - instance/class/local variables
   - aliases and enum members
+- Go to type definition (best-effort type inference from annotations and assignments).
+- Go to implementation for subclasses, includers, and method overrides.
+- Document symbols (outline).
+- Hover with signature and documentation.
+- Signature help with active parameter selection.
+- Document highlight for local/instance/class variables and type paths.
+- Selection ranges based on AST nesting.
+- Rename (prepare + apply; best-effort for locals, ivars, methods, and type paths within the workspace).
 - Completion:
   - member methods on . and ::
   - instance/class/local variables
   - type/namespace and enum member completions
   - keyword completions based on context
   - require path suggestions
+  - completion resolve for docs and signatures
 
 ## Limitations
 
 - No full compiler type checking or macro expansion. Type inference is best-effort based on annotations and simple assignments.
 - Macro expansion is limited to built-in macros (getter, setter, property, record) and a small interpreter for user-defined macros.
-- References, rename, and diagnostics are not implemented yet (some capabilities are still stubbed).
+- Rename is best-effort and currently scoped to workspace files (stdlib is not edited).
+- References and diagnostics are not implemented yet (some capabilities are still stubbed).
 
 ## Usage
 

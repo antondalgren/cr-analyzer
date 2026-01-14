@@ -16,6 +16,24 @@ module CRA::Psi
         true
       end
 
+      def visit(node : Crystal::Call) : Bool
+        if block = node.block
+          receiver_type = receiver_type_ref(node)
+          hints = block_param_type_hints(node, receiver_type)
+          block.args.each_with_index do |arg, idx|
+            type_ref = nil
+            if arg.is_a?(Crystal::Arg)
+              if restriction = arg.restriction
+                type_ref = type_ref_from_type(restriction)
+              end
+            end
+            type_ref ||= hints[idx]?
+            assign_type(arg, type_ref) if type_ref
+          end
+        end
+        true
+      end
+
       def visit(node : Crystal::TypeDeclaration) : Bool
         return false unless before_cursor?(node)
 
@@ -104,6 +122,75 @@ module CRA::Psi
           return if @fill_only && @env.cvars.has_key?(target.name)
           @env.cvars[target.name] = type_ref
         end
+      end
+
+      private def receiver_type_ref(call : Crystal::Call) : TypeRef?
+        obj = call.obj
+        return nil unless obj
+
+        case obj
+        when Crystal::Var
+          @env.locals[obj.name]?
+        when Crystal::InstanceVar
+          @env.ivars[obj.name]?
+        when Crystal::ClassVar
+          @env.cvars[obj.name]?
+        when Crystal::Path, Crystal::Generic, Crystal::Metaclass, Crystal::Union, Crystal::Self
+          type_ref_from_type(obj)
+        else
+          type_ref_from_value(obj)
+        end
+      end
+
+      private def block_param_type_hints(call : Crystal::Call, receiver_type : TypeRef?) : Array(TypeRef)
+        return [] of TypeRef unless receiver_type
+
+        method_name = call.name
+        name = receiver_type.name
+        args = receiver_type.args
+        hints = [] of TypeRef
+
+        # Fluent methods that yield the receiver.
+        if {"try", "tap", "with", "let", "yield_self"}.includes?(method_name)
+          hints << receiver_type
+          return hints
+        end
+
+        if name
+          base = name.starts_with?("::") ? name[2..] : name
+          case base
+          when "Array", "Slice", "StaticArray", "Deque", "Set"
+            if elem = args.first?
+              if block_arity_one?(call)
+                hints << elem
+              elsif block_arity_two?(call)
+                hints << elem
+                hints << TypeRef.named("Int32")
+              end
+            end
+          when "Hash"
+            key = args[0]?
+            value = args[1]?
+            if block_arity_two?(call)
+              hints << (key || receiver_type)
+              hints << (value || receiver_type)
+            elsif block_arity_one?(call)
+              hints << (value || receiver_type)
+            end
+          end
+        end
+
+        hints
+      end
+
+      private def block_arity_one?(call : Crystal::Call) : Bool
+        block_args = call.block.try(&.args) || [] of Crystal::Arg
+        block_args.size == 1
+      end
+
+      private def block_arity_two?(call : Crystal::Call) : Bool
+        block_args = call.block.try(&.args) || [] of Crystal::Arg
+        block_args.size == 2
       end
 
       private def before_cursor?(node : Crystal::ASTNode) : Bool

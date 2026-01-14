@@ -5,10 +5,10 @@ Legend:
 - [~] Partial
 - [ ] Planned
 
-- [ ] Go to Declaration
+- [x] Go to Declaration
 - [x] Go to Definition
-- [ ] Go to Type Definition
-- [ ] Go to Implementation
+- [x] Go to Type Definition
+- [x] Go to Implementation
 - [ ] Find References
 - [ ] Prepare Call Hierarchy
 - [ ] Call Hierarchy Incoming Calls
@@ -16,14 +16,14 @@ Legend:
 - [ ] Prepare Type Hierarchy
 - [ ] Type Hierarchy Super Types
 - [ ] Type Hierarchy Sub Types
-- [ ] Document Highlight
+- [x] Document Highlight
 - [ ] Document Link
 - [ ] Document Link Resolve
 - [x] Hover
 - [ ] Code Lens
 - [ ] Code Lens Refresh
 - [ ] Folding Range
-- [ ] Selection Range
+- [x] Selection Range
 - [x] Document Symbols
 - [ ] Semantic Tokens
 - [ ] Inline Value
@@ -36,7 +36,7 @@ Legend:
 - [x] Completion Item Resolve
 - [ ] Publish Diagnostics
 - [ ] Pull Diagnostics
-- [ ] Signature Help
+- [x] Signature Help
 - [ ] Code Action
 - [ ] Code Action Resolve
 - [ ] Document Color
@@ -44,6 +44,6 @@ Legend:
 - [ ] Formatting
 - [ ] Range Formatting
 - [ ] On type Formatting
-- [ ] Rename
-- [ ] Prepare Rename
+- [~] Rename
+- [x] Prepare Rename
 - [ ] Linked Editing Range
