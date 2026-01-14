@@ -34,6 +34,7 @@ module CRA::Psi
       type_vars : Array(String) = [] of String,
       doc : String? = nil
     ) : CRA::Psi::Module
+      name = canonical_name(name)
       if found = find_module(name)
         assign_doc(found, doc)
         record_type_definition(name, :module, location, found, type_vars)
@@ -60,6 +61,7 @@ module CRA::Psi
       type_vars : Array(String) = [] of String,
       doc : String? = nil
     ) : CRA::Psi::Class
+      name = canonical_name(name)
       if found = find_class(name)
         assign_doc(found, doc)
         record_type_definition(name, :class, location, found, type_vars)
@@ -83,6 +85,7 @@ module CRA::Psi
       location : Location?,
       doc : String? = nil
     ) : CRA::Psi::Enum
+      name = canonical_name(name)
       if found = find_enum(name)
         assign_doc(found, doc)
         record_type_definition(name, :enum, location, found, [] of String)
@@ -281,6 +284,7 @@ module CRA::Psi
       element : PsiElement,
       type_vars : Array(String) = [] of String
     )
+      name = canonical_name(name)
       file = @current_file
       return unless file
 
@@ -303,6 +307,7 @@ module CRA::Psi
     end
 
     def record_alias(name : String, target : TypeRef?, location : Location?, doc : String? = nil)
+      name = canonical_name(name)
       file = @current_file
       return unless file
 
@@ -329,6 +334,7 @@ module CRA::Psi
     end
 
     private def find_alias(name : String, file : String? = nil) : CRA::Psi::Alias?
+      name = canonical_name(name)
       defs = @aliases_by_name[name]?
       return nil unless defs
       return defs[file] if file && defs[file]?
@@ -336,6 +342,7 @@ module CRA::Psi
     end
 
     private def resolve_alias_in_context(name : String, context : String?, file : String? = nil) : CRA::Psi::Alias?
+      name = canonical_name(name)
       return find_alias(name, file) if name.includes?("::")
 
       if context && !context.empty?
@@ -493,6 +500,7 @@ module CRA::Psi
     end
 
     def find_module(name : String, create_on_missing : Bool = false) : CRA::Psi::Module?
+      name = canonical_name(name)
       @roots.each do |root|
         if root.is_a?(CRA::Psi::Module) && root.name == name
           return root.as(CRA::Psi::Module)
@@ -514,6 +522,7 @@ module CRA::Psi
     end
 
     def find_class(name : String) : CRA::Psi::Class?
+      name = canonical_name(name)
       @roots.each do |root|
         if root.is_a?(CRA::Psi::Class) && root.name == name
           return root.as(CRA::Psi::Class)
@@ -530,6 +539,7 @@ module CRA::Psi
     end
 
     def find_enum(name : String) : CRA::Psi::Enum?
+      name = canonical_name(name)
       @roots.each do |root|
         if root.is_a?(CRA::Psi::Enum) && root.name == name
           return root.as(CRA::Psi::Enum)
@@ -539,6 +549,7 @@ module CRA::Psi
     end
 
     private def find_type(name : String) : CRA::Psi::Module | CRA::Psi::Class | CRA::Psi::Enum | Nil
+      name = canonical_name(name)
       find_class(name) || find_module(name) || find_enum(name)
     end
 
@@ -567,6 +578,10 @@ module CRA::Psi
         end
       end
       results
+    end
+
+    private def canonical_name(name : String) : String
+      name.starts_with?("::") ? name[2..] : name
     end
   end
 end
