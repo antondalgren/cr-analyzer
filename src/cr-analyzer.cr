@@ -104,6 +104,42 @@ module CRA
         nil
       end
 
+      def handle(request : Types::CallHierarchyPrepareRequest)
+        Log.error { "Handling call hierarchy prepare request" }
+        @workspace.try do |ws|
+          items = ws.prepare_call_hierarchy(request)
+          return Types::Response.new(request.id, items)
+        end
+        Types::Response.new(request.id, [] of Types::CallHierarchyItem)
+      rescue ex
+        Log.error { "Error handling request: #{ex.message}" }
+        nil
+      end
+
+      def handle(request : Types::CallHierarchyIncomingCallsRequest)
+        Log.error { "Handling call hierarchy incoming calls request" }
+        @workspace.try do |ws|
+          calls = ws.call_hierarchy_incoming(request)
+          return Types::Response.new(request.id, calls)
+        end
+        Types::Response.new(request.id, [] of Types::CallHierarchyIncomingCall)
+      rescue ex
+        Log.error { "Error handling request: #{ex.message}" }
+        nil
+      end
+
+      def handle(request : Types::CallHierarchyOutgoingCallsRequest)
+        Log.error { "Handling call hierarchy outgoing calls request" }
+        @workspace.try do |ws|
+          calls = ws.call_hierarchy_outgoing(request)
+          return Types::Response.new(request.id, calls)
+        end
+        Types::Response.new(request.id, [] of Types::CallHierarchyOutgoingCall)
+      rescue ex
+        Log.error { "Error handling request: #{ex.message}" }
+        nil
+      end
+
       def handle(request : Types::InitializedNotification)
         Log.info { "Client initialized" }
         nil
@@ -144,6 +180,45 @@ module CRA
         Types::Response.new(request.id, nil)
       rescue ex
         Log.error { "Error handling request: #{ex.message}" }
+        nil
+      end
+
+      def handle(request : Types::WorkspaceSymbolRequest)
+        Log.error { "Handling workspace symbol request" }
+        @workspace.try do |ws|
+          symbols = ws.workspace_symbols(request)
+          return Types::Response.new(request.id, symbols)
+        end
+        Types::Response.new(request.id, [] of Types::SymbolInformation)
+      rescue ex
+        Log.error { "Error handling request: #{ex.message}" }
+        nil
+      end
+
+      def handle(request : Types::DocumentDiagnosticRequest)
+        Log.error { "Handling document diagnostic request" }
+        @workspace.try do |ws|
+          report = ws.document_diagnostics(request)
+          return Types::Response.new(request.id, report)
+        end
+        Types::Response.new(request.id, Types::DocumentDiagnosticReportFull.new([] of Types::Diagnostic))
+      rescue ex
+        Log.error { "Error handling request: #{ex.message}" }
+        nil
+      end
+
+      def handle(request : Types::WorkspaceDiagnosticRequest)
+        Log.error { "Handling workspace diagnostic request" }
+        # Only document diagnostics supported for now.
+        Types::Response.new(request.id, Types::WorkspaceDiagnosticReport.new([] of Types::WorkspaceDocumentDiagnosticReport))
+      rescue ex
+        Log.error { "Error handling request: #{ex.message}" }
+        nil
+      end
+
+      # Notifications are no-ops server-side; client controls publish.
+      def handle(request : Types::DidChangeConfigurationNotification)
+        Log.info { "Configuration changed: #{request.to_json}" }
         nil
       end
 
@@ -216,6 +291,8 @@ module CRA
             Log.error { "Error parsing #{uri}: #{ex.message}" }
           end
           ws.reindex_file(uri, program)
+          ws_diag = ws.publish_diagnostics(uri)
+          @server.send(Types::PublishDiagnosticsNotification.new(ws_diag))
         end
         nil
       end
@@ -234,6 +311,8 @@ module CRA
             return nil
           end
           ws.reindex_file(uri, program)
+          ws_diag = ws.publish_diagnostics(uri)
+          @server.send(Types::PublishDiagnosticsNotification.new(ws_diag))
         end
         nil
       end
@@ -255,6 +334,8 @@ module CRA
           else
             ws.reindex_file(uri)
           end
+          ws_diag = ws.publish_diagnostics(uri)
+          @server.send(Types::PublishDiagnosticsNotification.new(ws_diag))
         end
         nil
       end
@@ -293,7 +374,12 @@ module CRA
             rename_provider: Types::RenameOptions.new(prepare_provider: true),
             completion_provider: Types::CompletionOptions.new(resolve_provider: true, trigger_characters: [".", ":", "@", "#", "<", "\"", "'", "/", " "]),
             selection_range_provider: true,
-            inline_value_provider: true
+            call_hierarchy_provider: true,
+            inline_value_provider: true,
+            diagnostic_provider: Types::DiagnosticOptions.new(
+              inter_file_dependencies: false,
+              workspace_diagnostics: false
+            )
           )
         ))
       rescue ex

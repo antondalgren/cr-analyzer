@@ -76,8 +76,7 @@ describe CRA::Workspace do
       path = File.join(dir, "declaration.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       call_index = index_for(code, "greet", 1)
@@ -110,8 +109,7 @@ describe CRA::Workspace do
       path = File.join(dir, "type_definition.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       use_index = index_for(code, "user", 1)
@@ -144,8 +142,7 @@ describe CRA::Workspace do
       path = File.join(dir, "implementation_method.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       base_index = index_for(code, "greet", 0)
@@ -174,8 +171,7 @@ describe CRA::Workspace do
       path = File.join(dir, "implementation_type.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       base_index = index_for(code, "Base", 0)

@@ -1,3 +1,5 @@
+require "uri"
+
 module CRA::Psi
   class SemanticIndex
     getter current_file : String?
@@ -197,6 +199,9 @@ module CRA::Psi
       if elements = @elements_by_file.delete(file)
         elements.each { |element| detach(element) }
       end
+      if methods = @methods_by_file.delete(file)
+        methods.each { |method| remove_method(method) }
+      end
 
       if includes = @includes_by_file.delete(file)
         includes.each do |entry|
@@ -275,6 +280,28 @@ module CRA::Psi
       file = element.file
       return unless file
       (@elements_by_file[file] ||= [] of PsiElement) << element
+    end
+
+    def register_method(method : CRA::Psi::Method)
+      key = method_key(method)
+      @method_by_key[key] = method
+      if file = method.file
+        (@methods_by_file[file] ||= [] of CRA::Psi::Method) << method
+      end
+    end
+
+    def record_call(from_method : CRA::Psi::Method, to_method : CRA::Psi::Method, call_loc : Location?)
+      from_key = method_key(from_method)
+      to_key = method_key(to_method)
+      return if from_key == to_key
+
+      edge = CallEdge.new(to_key, call_loc)
+      add_edge(@call_graph, from_key, edge)
+
+      rev_edge = CallEdge.new(from_key, call_loc)
+      add_edge(@reverse_call_graph, to_key, rev_edge)
+      @method_by_key[from_key] ||= from_method
+      @method_by_key[to_key] ||= to_method
     end
 
     private def record_type_definition(
@@ -580,8 +607,95 @@ module CRA::Psi
       results
     end
 
+    def method_for_call_item(item : CRA::Types::CallHierarchyItem) : CRA::Psi::Method?
+      files = [item.uri]
+      begin
+        files << URI.parse(item.uri).path
+      rescue
+      end
+      files.each do |file|
+        next unless methods = @methods_by_file[file]?
+        methods.each do |method|
+          if method.name == item.name && location_matches_range?(method.location, item.range)
+            return method
+          end
+        end
+      end
+      nil
+    end
+
+    def call_hierarchy_outgoing_methods(item : CRA::Types::CallHierarchyItem) : Array(NamedTuple(method: CRA::Psi::Method, ranges: Array(CRA::Types::Range)))
+      method = method_for_call_item(item)
+      return [] of NamedTuple(method: CRA::Psi::Method, ranges: Array(CRA::Types::Range)) unless method
+      key = method_key(method)
+      targets = @call_graph[key]?
+      return [] of NamedTuple(method: CRA::Psi::Method, ranges: Array(CRA::Types::Range)) unless targets
+      results = [] of NamedTuple(method: CRA::Psi::Method, ranges: Array(CRA::Types::Range))
+      targets.each do |edge|
+        next unless target = @method_by_key[edge.target_key]?
+        ranges = [] of CRA::Types::Range
+        if loc = edge.location
+          ranges << loc.to_range
+        end
+        results << {method: target, ranges: ranges}
+      end
+      results
+    end
+
+    def call_hierarchy_incoming_methods(item : CRA::Types::CallHierarchyItem) : Array(NamedTuple(method: CRA::Psi::Method, ranges: Array(CRA::Types::Range)))
+      method = method_for_call_item(item)
+      return [] of NamedTuple(method: CRA::Psi::Method, ranges: Array(CRA::Types::Range)) unless method
+      key = method_key(method)
+      callers = @reverse_call_graph[key]?
+      return [] of NamedTuple(method: CRA::Psi::Method, ranges: Array(CRA::Types::Range)) unless callers
+      results = [] of NamedTuple(method: CRA::Psi::Method, ranges: Array(CRA::Types::Range))
+      callers.each do |edge|
+        next unless caller = @method_by_key[edge.target_key]?
+        ranges = [] of CRA::Types::Range
+        if loc = edge.location
+          ranges << loc.to_range
+        end
+        results << {method: caller, ranges: ranges}
+      end
+      results
+    end
+
     private def canonical_name(name : String) : String
       name.starts_with?("::") ? name[2..] : name
+    end
+
+    private def method_key(method : CRA::Psi::Method) : String
+      owner_name = method.owner.try(&.name) || ""
+      separator = method.class_method ? "." : "#"
+      "#{owner_name}#{separator}#{method.name}"
+    end
+
+    private def remove_method(method : CRA::Psi::Method)
+      key = method_key(method)
+      @method_by_key.delete(key)
+      @call_graph.delete(key)
+      @reverse_call_graph.delete(key)
+      @call_graph.each do |from, edges|
+        edges.reject! { |edge| edge.target_key == key }
+        @call_graph.delete(from) if edges.empty?
+      end
+      @reverse_call_graph.each do |to, edges|
+        edges.reject! { |edge| edge.target_key == key }
+        @reverse_call_graph.delete(to) if edges.empty?
+      end
+    end
+
+    private def add_edge(store : Hash(String, Array(CallEdge)), key : String, edge : CallEdge)
+      edges = (store[key] ||= [] of CallEdge)
+      edges << edge unless edges.any? { |existing| existing.target_key == edge.target_key && existing.location == edge.location }
+    end
+
+    private def location_matches_range?(location : CRA::Psi::Location?, range : CRA::Types::Range) : Bool
+      return false unless location
+      location.start_line == range.start_position.line &&
+        location.start_character == range.start_position.character &&
+        location.end_line == range.end_position.line &&
+        location.end_character == range.end_position.character
     end
   end
 end

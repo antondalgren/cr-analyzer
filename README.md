@@ -4,32 +4,38 @@ cr-analyzer is a lightweight Language Server Protocol (LSP) server for the Cryst
 
 ## Status
 
-Active development. Implemented LSP features include completion (with resolve), go-to-declaration/definition/type definition/implementation, hover, signature help, document symbols, document highlight, selection range, rename (best-effort), and full-text document sync (didOpen/didChange/didSave). Other LSP features are planned.
+Active development. Implemented LSP features include completion (with resolve), go-to-declaration/definition/type definition/implementation, hover, signature help, document symbols, document highlight, references, inline values, selection range, call hierarchy (incoming/outgoing), rename (best-effort), diagnostics (push + pull), workspace symbols, and full-text document sync (didOpen/didChange/didSave). Other LSP features are planned.
 
 ## Features
 
-- Workspace scan of project sources, lib, and Crystal stdlib.
-- Go to declaration (best-effort; currently mirrors go-to-definition).
-- Go to definition for:
+- Workspace scan of project sources, `lib`, and Crystal stdlib.
+- Go to declaration/definition for:
   - types (class/module/enum)
   - methods and overloads (arity aware)
-  - constructors (new -> initialize/self.new)
+  - constructors (`new` -> `initialize`/`self.new`)
   - instance/class/local variables
   - aliases and enum members
-- Go to type definition (best-effort type inference from annotations and assignments).
+- Go to type definition (best-effort type inference from annotations/assignments).
 - Go to implementation for subclasses, includers, and method overrides.
-- Document symbols (outline).
-- Hover with signature and documentation.
+- References (locals, ivars/cvars, types, enum members).
+- Document symbols (outline) and workspace symbols.
+- Hover with signature + documentation.
 - Signature help with active parameter selection.
-- Document highlight for local/instance/class variables and type paths.
+- Document highlight for locals/ivars/cvars and type paths.
 - Selection ranges based on AST nesting.
-- Rename (prepare + apply; best-effort for locals, ivars, methods, and type paths within the workspace).
+- Inline values (variables in range).
+- Call hierarchy (incoming/outgoing).
+- Rename (prepare + apply; best-effort for locals, ivars, methods, type paths in workspace).
+- Diagnostics:
+  - Syntax/parser errors (Crystal parser or facet parser fallback).
+  - Facet-based diagnostics + lint-style warnings (TODO/FIXME, empty rescue, trailing whitespace, duplicate `require`, missing final newline, mixed indentation, unused def/block args).
+  - Both push and pull diagnostic flows supported.
 - Completion:
-  - member methods on . and ::
+  - member methods on `.` and `::`
   - instance/class/local variables
-  - type/namespace and enum member completions
+  - type/namespace and enum member completions (aliases included)
   - keyword completions based on context
-  - require path suggestions
+  - `require` path suggestions
   - completion resolve for docs and signatures
 
 ## Limitations
@@ -37,7 +43,6 @@ Active development. Implemented LSP features include completion (with resolve), 
 - No full compiler type checking or macro expansion. Type inference is best-effort based on annotations and simple assignments.
 - Macro expansion is limited to built-in macros (getter, setter, property, record) and a small interpreter for user-defined macros.
 - Rename is best-effort and currently scoped to workspace files (stdlib is not edited).
-- References and diagnostics are not implemented yet (some capabilities are still stubbed).
 
 ## Usage
 

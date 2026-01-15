@@ -486,5 +486,79 @@ module CRA::Psi
 
       [] of Method
     end
+
+    # Cross-file references for types/aliases by name (best-effort; per-file path search).
+    def references_for_path(name : String, context : String?, current_file : String?) : Array(CRA::Types::Location)
+      locs = [] of CRA::Types::Location
+      seen_files = {} of String => Bool
+
+      each_candidate_name(name, context) do |candidate|
+        if defs = @type_defs_by_name[candidate]?
+          defs.each_key { |file| locs.concat(references_for_file(candidate, file, seen_files, current_file)) }
+        end
+        if aliases = @aliases_by_name[candidate]?
+          aliases.each_key { |file| locs.concat(references_for_file(candidate, file, seen_files, current_file)) }
+        end
+      end
+
+      locs
+    end
+
+    private def each_candidate_name(name : String, context : String?, &block : String ->)
+      name = canonical_name(name)
+      yield name
+      if context && !context.empty?
+        parts = context.split("::")
+        while parts.size > 0
+          candidate = (parts + [name]).join("::")
+          yield candidate
+          parts.pop
+        end
+      end
+    end
+
+    private def references_for_file(name : String, file : String, seen : Hash(String, Bool), current_file : String?) : Array(CRA::Types::Location)
+      return [] of CRA::Types::Location if seen[file]?
+      seen[file] = true
+      path = URI.parse(file).path
+      return [] of CRA::Types::Location unless File.exists?(path)
+
+      source = File.read(path)
+      parser = Crystal::Parser.new(source)
+      parser.wants_doc = true
+      program = parser.parse
+      collector = CRA::PathHighlightCollector.new(name, name.starts_with?("::"))
+      program.accept(collector)
+      uri = file.starts_with?("file://") ? file : "file://#{file}"
+      locations = [] of CRA::Types::Location
+      collector.nodes.each do |node|
+        if range = node_range_for_highlight(node, source)
+          locations << CRA::Types::Location.new(uri: uri, range: range)
+        end
+      end
+      locations
+    rescue
+      [] of CRA::Types::Location
+    end
+
+    private def node_range_for_highlight(node : Crystal::ASTNode, source : String) : CRA::Types::Range?
+      if node.responds_to?(:name_size) && (loc = node.location)
+        start_line = loc.line_number - 1
+        start_char = loc.column_number - 1
+        size = node.name_size
+        end_char = start_char + size
+        return CRA::Types::Range.new(
+          start_position: CRA::Types::Position.new(line: start_line, character: start_char),
+          end_position: CRA::Types::Position.new(line: start_line, character: end_char)
+        )
+      elsif loc = node.location
+        end_loc = node.end_location || loc
+        return CRA::Types::Range.new(
+          start_position: CRA::Types::Position.new(line: loc.line_number - 1, character: loc.column_number - 1),
+          end_position: CRA::Types::Position.new(line: end_loc.line_number - 1, character: end_loc.column_number)
+        )
+      end
+      nil
+    end
   end
 end

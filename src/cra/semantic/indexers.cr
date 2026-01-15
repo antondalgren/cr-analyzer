@@ -264,6 +264,11 @@ module CRA::Psi
         doc: node.doc
       )
       @index.attach method_element, owner
+      @index.register_method(method_element)
+      if body = node.body
+        context_name = owner.responds_to?(:name) ? owner.name : nil
+        body.accept(CallCollector.new(@index, method_element, node, context_name))
+      end
       false
     end
 
@@ -306,6 +311,51 @@ module CRA::Psi
       end
       max = splat_index ? nil : node.args.size
       {min: required, max: max}
+    end
+
+    # Collects call edges from a method body to resolved method definitions.
+    class CallCollector < Crystal::Visitor
+      def initialize(@index : SemanticIndex, @from_method : CRA::Psi::Method, @scope_def : Crystal::Def, @context_name : String?)
+      end
+
+      def visit(node : Crystal::ASTNode) : Bool
+        true
+      end
+
+      def visit(node : Crystal::Call) : Bool
+        targets = @index.find_definitions(
+          node,
+          @context_name,
+          @scope_def,
+          nil,
+          node.location,
+          @index.current_file
+        )
+        targets.each do |target|
+          if method = target.as?(CRA::Psi::Method)
+            call_loc = @index.location_for(node)
+            @index.record_call(@from_method, method, call_loc)
+          end
+        end
+        node.accept_children(self)
+        false
+      end
+
+      def visit(node : Crystal::Def) : Bool
+        false
+      end
+
+      def visit(node : Crystal::ClassDef) : Bool
+        false
+      end
+
+      def visit(node : Crystal::ModuleDef) : Bool
+        false
+      end
+
+      def visit(node : Crystal::Macro) : Bool
+        false
+      end
     end
   end
 

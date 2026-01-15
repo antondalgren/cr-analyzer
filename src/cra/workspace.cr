@@ -4,6 +4,7 @@ require "uri"
 require "log"
 require "compiler/crystal/syntax"
 require "./semantic/alayst"
+require "./workspace/visitor_helpers"
 require "./workspace/ast_node_extensions"
 require "./workspace/node_finder"
 require "./workspace/document"
@@ -55,7 +56,9 @@ module CRA
       # Scan the workspace for Crystal files
       Log.info { "Scanning workspace at #{@root}" }
       seen = {} of String => Bool
-      stdlib_paths.each { |path| scan_path(path, seen) }
+      unless ENV["CRA_SKIP_STDLIB_SCAN"]? == "1"
+        stdlib_paths.each { |path| scan_path(path, seen) }
+      end
 
       lib_path = @path.join("lib")
       scan_path(lib_path, seen) if Dir.exists?(lib_path.to_s)
@@ -399,6 +402,90 @@ module CRA
       end
     end
 
+    def prepare_call_hierarchy(request : Types::CallHierarchyPrepareRequest) : Array(Types::CallHierarchyItem)
+      document = document(request.text_document.uri)
+      return [] of Types::CallHierarchyItem unless document
+
+      finder = document.node_context(request.position)
+      node = finder.node || finder.previous_node
+      return [] of Types::CallHierarchyItem unless node
+
+      definitions = @analyzer.find_definitions(
+        node,
+        finder.enclosing_type_name,
+        finder.enclosing_def,
+        finder.enclosing_class,
+        finder.cursor_location,
+        request.text_document.uri
+      )
+      items = [] of Types::CallHierarchyItem
+      seen = {} of String => Bool
+      definitions.each do |definition|
+        next unless item = call_hierarchy_item(definition)
+        key = "#{item.name}:#{item.uri}:#{item.range.start_position.line}:#{item.range.start_position.character}"
+        next if seen[key]?
+        seen[key] = true
+        items << item
+      end
+      items
+    end
+
+    def call_hierarchy_incoming(_request : Types::CallHierarchyIncomingCallsRequest) : Array(Types::CallHierarchyIncomingCall)
+      methods = @analyzer.call_hierarchy_incoming_methods(_request.item)
+      calls = [] of Types::CallHierarchyIncomingCall
+      methods.each do |entry|
+        method = entry[:method]
+        ranges = entry[:ranges]
+        if item = call_hierarchy_item(method)
+          from_ranges = ranges.empty? ? (method.location.try(&.to_range) ? [method.location.not_nil!.to_range] : [] of Types::Range) : ranges
+          calls << Types::CallHierarchyIncomingCall.new(item, from_ranges)
+        end
+      end
+      calls
+    end
+
+    def call_hierarchy_outgoing(_request : Types::CallHierarchyOutgoingCallsRequest) : Array(Types::CallHierarchyOutgoingCall)
+      methods = @analyzer.call_hierarchy_outgoing_methods(_request.item)
+      calls = [] of Types::CallHierarchyOutgoingCall
+      fallback_from = _request.item.selection_range
+      methods.each do |entry|
+        method = entry[:method]
+        ranges = entry[:ranges]
+        if item = call_hierarchy_item(method)
+          from_ranges = ranges.empty? ? [fallback_from] : ranges
+          calls << Types::CallHierarchyOutgoingCall.new(item, from_ranges)
+        end
+      end
+      calls
+    end
+
+    def find_references(request : Types::ReferencesRequest) : Array(Types::Location)
+      document = document(request.text_document.uri)
+      return [] of Types::Location unless document
+
+      finder = document.node_context(request.position)
+      node = finder.node || finder.previous_node
+      return [] of Types::Location unless node
+
+      include_decl = request.context.include_declaration
+      case node
+      when Crystal::Var
+        references_for_local(node.name, finder.enclosing_def, request.text_document.uri, include_decl)
+      when Crystal::Arg
+        references_for_local(node.name, finder.enclosing_def, request.text_document.uri, include_decl)
+      when Crystal::InstanceVar
+        references_for_instance_var(node.name, finder.enclosing_class, request.text_document.uri)
+      when Crystal::ClassVar
+        references_for_class_var(node.name, finder.enclosing_class, request.text_document.uri)
+      when Crystal::Path
+        refs = references_for_path(node.full, node.global?, document.program, request.text_document.uri)
+        refs.concat(@analyzer.references_for_path(node.full, finder.enclosing_type_name, request.text_document.uri))
+        refs
+      else
+        [] of Types::Location
+      end
+    end
+
     def inline_values(request : Types::InlineValueRequest) : Array(Types::InlineValue)
       document = document(request.text_document.uri)
       return [] of Types::InlineValue unless document
@@ -408,6 +495,37 @@ module CRA
       collector = InlineValueCollector.new(request.range)
       program.accept(collector)
       collector.values
+    end
+
+    def document_diagnostics(request : Types::DocumentDiagnosticRequest) : Types::DocumentDiagnosticReport
+      document = document(request.text_document.uri)
+      return Types::DocumentDiagnosticReportFull.new([] of Types::Diagnostic) unless document
+
+      Types::DocumentDiagnosticReportFull.new(document.diagnostics)
+    end
+
+    def workspace_symbols(request : Types::WorkspaceSymbolRequest) : Array(Types::SymbolInformation)
+      query = request.query
+      results = [] of Types::SymbolInformation
+      seen = {} of String => Bool
+
+      @indexer.symbols.each_key do |uri|
+        @indexer.symbol_informations(uri).each do |info|
+          next unless info.name.includes?(query)
+          key = "#{info.name}:#{info.location.uri}:#{info.location.range.start_position.line}:#{info.location.range.start_position.character}"
+          next if seen[key]?
+          seen[key] = true
+          results << info
+        end
+      end
+
+      results
+    end
+
+    def publish_diagnostics(uri : String) : Types::PublishDiagnosticsParams
+      document = document(uri)
+      diags = document ? document.diagnostics : [] of Types::Diagnostic
+      Types::PublishDiagnosticsParams.new(uri: uri, diagnostics: diags)
     end
 
     private def elements_to_locations(elements : Array(Psi::PsiElement)) : Array(Types::Location)
@@ -636,22 +754,19 @@ module CRA
     private def highlights_for_local(name : String, scope_def : Crystal::Def?) : Array(Types::DocumentHighlight)
       return [] of Types::DocumentHighlight unless scope_def
 
-      nodes = [] of Crystal::ASTNode
+      collector = NameHighlightCollector.new(name, var: true, arg: true)
+      scope_def.body.accept(collector)
       scope_def.args.each do |arg|
-        nodes << arg if arg.name == name
+        collector.nodes << arg if arg.name == name
       end
 
-      collector = LocalVarHighlightCollector.new(name)
-      scope_def.body.accept(collector)
-      nodes.concat(collector.nodes)
-
-      document_highlights_for(nodes)
+      document_highlights_for(collector.nodes)
     end
 
     private def highlights_for_instance_var(name : String, scope_class : Crystal::ClassDef?) : Array(Types::DocumentHighlight)
       return [] of Types::DocumentHighlight unless scope_class
 
-      collector = InstanceVarHighlightCollector.new(name)
+      collector = NameHighlightCollector.new(name, ivar: true)
       scope_class.body.accept(collector)
       document_highlights_for(collector.nodes)
     end
@@ -659,7 +774,7 @@ module CRA
     private def highlights_for_class_var(name : String, scope_class : Crystal::ClassDef?) : Array(Types::DocumentHighlight)
       return [] of Types::DocumentHighlight unless scope_class
 
-      collector = ClassVarHighlightCollector.new(name)
+      collector = NameHighlightCollector.new(name, cvar: true)
       scope_class.body.accept(collector)
       document_highlights_for(collector.nodes)
     end
@@ -670,6 +785,42 @@ module CRA
       collector = PathHighlightCollector.new(path.full, path.global?)
       program.accept(collector)
       document_highlights_for(collector.nodes)
+    end
+
+    private def references_for_local(name : String, scope_def : Crystal::Def?, uri : String, include_decl : Bool) : Array(Types::Location)
+      return [] of Types::Location unless scope_def
+
+      collector = NameHighlightCollector.new(name, var: true, arg: true)
+      scope_def.body.accept(collector)
+      scope_def.args.each do |arg|
+        collector.nodes << arg if arg.name == name
+      end
+      collector.nodes.reject! { |n| n.is_a?(Crystal::Arg) } unless include_decl
+      locations_for_nodes(collector.nodes, uri)
+    end
+
+    private def references_for_instance_var(name : String, scope_class : Crystal::ClassDef?, uri : String) : Array(Types::Location)
+      return [] of Types::Location unless scope_class
+
+      collector = NameHighlightCollector.new(name, ivar: true)
+      scope_class.body.accept(collector)
+      locations_for_nodes(collector.nodes, uri)
+    end
+
+    private def references_for_class_var(name : String, scope_class : Crystal::ClassDef?, uri : String) : Array(Types::Location)
+      return [] of Types::Location unless scope_class
+
+      collector = NameHighlightCollector.new(name, cvar: true)
+      scope_class.body.accept(collector)
+      locations_for_nodes(collector.nodes, uri)
+    end
+
+    private def references_for_path(full_name : String, global : Bool, program : Crystal::ASTNode?, uri : String) : Array(Types::Location)
+      return [] of Types::Location unless program
+
+      collector = PathHighlightCollector.new(full_name, global)
+      program.accept(collector)
+      locations_for_nodes(collector.nodes, uri)
     end
 
     private def document_highlights_for(nodes : Array(Crystal::ASTNode)) : Array(Types::DocumentHighlight)
@@ -686,6 +837,20 @@ module CRA
       end
 
       highlights
+    end
+
+    private def locations_for_nodes(nodes : Array(Crystal::ASTNode), uri : String) : Array(Types::Location)
+      locs = [] of Types::Location
+      seen = {} of String => Bool
+      nodes.each do |node|
+        range = node_name_range(node) || node_range(node)
+        next unless range
+        key = "#{range.start_position.line}:#{range.start_position.character}:#{range.end_position.line}:#{range.end_position.character}"
+        next if seen[key]?
+        seen[key] = true
+        locs << Types::Location.new(uri: uri, range: range)
+      end
+      locs
     end
 
     private def selection_range_for_path(path : Array(Crystal::ASTNode), position : Types::Position) : Types::SelectionRange
@@ -782,6 +947,39 @@ module CRA
         left.end_position.character == right.end_position.character
     end
 
+    private def call_hierarchy_item(element : Psi::PsiElement) : Types::CallHierarchyItem?
+      loc = element.location
+      file = element.file
+      return nil unless loc && file
+      uri = file.starts_with?("file://") ? file : "file://#{file}"
+      range = loc.to_range
+      Types::CallHierarchyItem.new(
+        name: element.name,
+        kind: symbol_kind_for(element),
+        uri: uri,
+        range: range,
+        selection_range: range,
+        detail: element.responds_to?(:owner) ? element.owner.try(&.name) : nil
+      )
+    end
+
+    private def symbol_kind_for(element : Psi::PsiElement) : Types::SymbolKind
+      case element
+      when Psi::Module
+        Types::SymbolKind::Module
+      when Psi::Class
+        Types::SymbolKind::Class
+      when Psi::Enum
+        Types::SymbolKind::Enum
+      when Psi::Method
+        Types::SymbolKind::Method
+      when Psi::InstanceVar, Psi::ClassVar
+        Types::SymbolKind::Field
+      else
+        Types::SymbolKind::Object
+      end
+    end
+
     # Collects inline value variable lookups within a requested range.
     private class InlineValueCollector < Crystal::Visitor
       getter values : Array(Types::InlineValue)
@@ -855,10 +1053,10 @@ module CRA
     end
   end
 
-  class LocalVarHighlightCollector < Crystal::Visitor
+  class NameHighlightCollector < Crystal::Visitor
     getter nodes : Array(Crystal::ASTNode)
 
-    def initialize(@name : String)
+    def initialize(@name : String, @var : Bool = false, @arg : Bool = false, @ivar : Bool = false, @cvar : Bool = false)
       @nodes = [] of Crystal::ASTNode
     end
 
@@ -867,95 +1065,39 @@ module CRA
     end
 
     def visit(node : Crystal::Var) : Bool
-      @nodes << node if node.name == @name
+      @nodes << node if @var && node.name == @name
       true
     end
 
     def visit(node : Crystal::Arg) : Bool
-      @nodes << node if node.name == @name
-      true
-    end
-
-    def visit(node : Crystal::Def) : Bool
-      false
-    end
-
-    def visit(node : Crystal::ClassDef) : Bool
-      false
-    end
-
-    def visit(node : Crystal::ModuleDef) : Bool
-      false
-    end
-
-    def visit(node : Crystal::EnumDef) : Bool
-      false
-    end
-
-    def visit(node : Crystal::Macro) : Bool
-      false
-    end
-  end
-
-  class InstanceVarHighlightCollector < Crystal::Visitor
-    getter nodes : Array(Crystal::ASTNode)
-
-    def initialize(@name : String)
-      @nodes = [] of Crystal::ASTNode
-    end
-
-    def visit(node : Crystal::ASTNode) : Bool
+      @nodes << node if @arg && node.name == @name
       true
     end
 
     def visit(node : Crystal::InstanceVar) : Bool
-      @nodes << node if node.name == @name
-      true
-    end
-
-    def visit(node : Crystal::ClassDef) : Bool
-      false
-    end
-
-    def visit(node : Crystal::ModuleDef) : Bool
-      false
-    end
-
-    def visit(node : Crystal::EnumDef) : Bool
-      false
-    end
-
-    def visit(node : Crystal::Macro) : Bool
-      false
-    end
-  end
-
-  class ClassVarHighlightCollector < Crystal::Visitor
-    getter nodes : Array(Crystal::ASTNode)
-
-    def initialize(@name : String)
-      @nodes = [] of Crystal::ASTNode
-    end
-
-    def visit(node : Crystal::ASTNode) : Bool
+      @nodes << node if @ivar && node.name == @name
       true
     end
 
     def visit(node : Crystal::ClassVar) : Bool
-      @nodes << node if node.name == @name
+      @nodes << node if @cvar && node.name == @name
+      true
+    end
+
+    def visit(node : Crystal::Def) : Bool
       true
     end
 
     def visit(node : Crystal::ClassDef) : Bool
-      false
+      true
     end
 
     def visit(node : Crystal::ModuleDef) : Bool
-      false
+      true
     end
 
     def visit(node : Crystal::EnumDef) : Bool
-      false
+      true
     end
 
     def visit(node : Crystal::Macro) : Bool

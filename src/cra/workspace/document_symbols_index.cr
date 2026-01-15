@@ -104,6 +104,10 @@ module CRA
       @symbols[uri] ||= [] of Types::DocumentSymbol
     end
 
+    def symbols : Hash(String, Array(Types::DocumentSymbol))
+      @symbols
+    end
+
     def symbol_informations(uri : String) : Array(Types::SymbolInformation)
       symbols = self[uri]
       flat = [] of Types::SymbolInformation

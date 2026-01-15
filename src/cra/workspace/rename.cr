@@ -1,5 +1,6 @@
 require "../types"
 require "compiler/crystal/syntax"
+require "./visitor_helpers"
 
 module CRA
   class Workspace
@@ -224,7 +225,7 @@ module CRA
         nodes << arg if arg.name == name
       end
 
-      collector = DefLocalRenameCollector.new(name)
+      collector = ScopedLocalRenameCollector.new(name)
       scope_def.body.accept(collector)
       nodes.concat(collector.nodes)
       edits_for_nodes(nodes, new_name)
@@ -238,7 +239,7 @@ module CRA
         nodes << arg if arg.name == name
       end
 
-      collector = BlockLocalRenameCollector.new(name)
+      collector = ScopedLocalRenameCollector.new(name)
       block.body.accept(collector)
       nodes.concat(collector.nodes)
       edits_for_nodes(nodes, new_name)
@@ -556,16 +557,17 @@ module CRA
     end
   end
 
-  class DefLocalRenameCollector < Crystal::Visitor
+  class ScopedLocalRenameCollector < Crystal::Visitor
+    include Workspace::VisitorHelpers
+
     getter nodes : Array(Crystal::ASTNode)
 
     def initialize(@name : String)
       @nodes = [] of Crystal::ASTNode
     end
 
-    def visit(node : Crystal::ASTNode) : Bool
-      true
-    end
+    continue_all
+    stop_at Crystal::Def, Crystal::ClassDef, Crystal::ModuleDef, Crystal::EnumDef, Crystal::Macro
 
     def visit(node : Crystal::Var) : Bool
       @nodes << node if node.name == @name
@@ -575,72 +577,12 @@ module CRA
     def visit(node : Crystal::Block) : Bool
       return false if node.args.any? { |arg| arg.name == @name }
       true
-    end
-
-    def visit(node : Crystal::Def) : Bool
-      false
-    end
-
-    def visit(node : Crystal::ClassDef) : Bool
-      false
-    end
-
-    def visit(node : Crystal::ModuleDef) : Bool
-      false
-    end
-
-    def visit(node : Crystal::EnumDef) : Bool
-      false
-    end
-
-    def visit(node : Crystal::Macro) : Bool
-      false
-    end
-  end
-
-  class BlockLocalRenameCollector < Crystal::Visitor
-    getter nodes : Array(Crystal::ASTNode)
-
-    def initialize(@name : String)
-      @nodes = [] of Crystal::ASTNode
-    end
-
-    def visit(node : Crystal::ASTNode) : Bool
-      true
-    end
-
-    def visit(node : Crystal::Var) : Bool
-      @nodes << node if node.name == @name
-      true
-    end
-
-    def visit(node : Crystal::Block) : Bool
-      return false if node.args.any? { |arg| arg.name == @name }
-      true
-    end
-
-    def visit(node : Crystal::Def) : Bool
-      false
-    end
-
-    def visit(node : Crystal::ClassDef) : Bool
-      false
-    end
-
-    def visit(node : Crystal::ModuleDef) : Bool
-      false
-    end
-
-    def visit(node : Crystal::EnumDef) : Bool
-      false
-    end
-
-    def visit(node : Crystal::Macro) : Bool
-      false
     end
   end
 
   class ClassScopedVarRenameCollector < Crystal::Visitor
+    include Workspace::VisitorHelpers
+
     getter nodes : Array(Crystal::ASTNode)
     @current_namespace : String?
 
@@ -649,9 +591,8 @@ module CRA
       @current_namespace = nil
     end
 
-    def visit(node : Crystal::ASTNode) : Bool
-      true
-    end
+    continue_all
+    stop_at_macros
 
     def visit(node : Crystal::ModuleDef) : Bool
       with_namespace(node.name.full) do
@@ -671,21 +612,17 @@ module CRA
       with_namespace(node.name.full) do
         if @current_namespace == @class_name
           if @kind == :class
-            class_collector = ClassVarHighlightCollector.new(@var_name)
+            class_collector = NameHighlightCollector.new(@var_name, cvar: true)
             node.body.accept(class_collector)
             @nodes.concat(class_collector.nodes)
           else
-            instance_collector = InstanceVarHighlightCollector.new(@var_name)
+            instance_collector = NameHighlightCollector.new(@var_name, ivar: true)
             node.body.accept(instance_collector)
             @nodes.concat(instance_collector.nodes)
           end
         end
         node.body.accept(self)
       end
-      false
-    end
-
-    def visit(node : Crystal::Macro) : Bool
       false
     end
 
@@ -704,6 +641,8 @@ module CRA
   end
 
   class MethodRenameCollector < Crystal::Visitor
+    include Workspace::VisitorHelpers
+
     getter call_nodes : Array(Crystal::Call)
     getter def_nodes : Array(Crystal::Def)
     @current_type : String?
@@ -717,6 +656,8 @@ module CRA
       @current_class = nil
       @current_def = nil
     end
+
+    stop_at_macros
 
     def visit(node : Crystal::ASTNode) : Bool
       true
@@ -786,10 +727,6 @@ module CRA
       true
     end
 
-    def visit(node : Crystal::Macro) : Bool
-      false
-    end
-
     private def def_matches?(node : Crystal::Def) : Bool
       return false unless @current_type
       key = "method:#{@current_type}:#{node.receiver ? "class" : "instance"}:#{node.name}"
@@ -811,6 +748,8 @@ module CRA
   end
 
   class PathRenameCollector < Crystal::Visitor
+    include Workspace::VisitorHelpers
+
     getter path_nodes : Array(Crystal::Path)
     @current_type : String?
     @current_class : Crystal::ClassDef?
@@ -822,6 +761,8 @@ module CRA
       @current_class = nil
       @current_def = nil
     end
+
+    stop_at_macros
 
     def visit(node : Crystal::ASTNode) : Bool
       true
@@ -891,10 +832,6 @@ module CRA
       true
     end
 
-    def visit(node : Crystal::Macro) : Bool
-      false
-    end
-
     private def with_type(name : String, &)
       prev = @current_type
       @current_type = qualify_name(name, prev)
@@ -910,6 +847,8 @@ module CRA
   end
 
   class TypeDefinitionRenameCollector < Crystal::Visitor
+    include Workspace::VisitorHelpers
+
     getter paths : Array(Crystal::Path)
     @current_namespace : String?
 
@@ -918,9 +857,8 @@ module CRA
       @current_namespace = nil
     end
 
-    def visit(node : Crystal::ASTNode) : Bool
-      true
-    end
+    continue_all
+    stop_at_macros
 
     def visit(node : Crystal::ModuleDef) : Bool
       full_name = qualify_name(node.name.full, @current_namespace)
@@ -963,10 +901,6 @@ module CRA
       false
     end
 
-    def visit(node : Crystal::Macro) : Bool
-      false
-    end
-
     private def with_namespace(name : String, &)
       prev = @current_namespace
       @current_namespace = name
@@ -982,6 +916,8 @@ module CRA
   end
 
   class EnumMemberRenameCollector < Crystal::Visitor
+    include Workspace::VisitorHelpers
+
     getter members : Array(Crystal::ASTNode)
     @current_namespace : String?
 
@@ -990,9 +926,8 @@ module CRA
       @current_namespace = nil
     end
 
-    def visit(node : Crystal::ASTNode) : Bool
-      true
-    end
+    continue_all
+    stop_at_macros
 
     def visit(node : Crystal::EnumDef) : Bool
       full_name = qualify_name(node.name.full, @current_namespace)
@@ -1020,10 +955,6 @@ module CRA
       with_namespace(qualify_name(node.name.full, @current_namespace)) do
         node.body.accept(self)
       end
-      false
-    end
-
-    def visit(node : Crystal::Macro) : Bool
       false
     end
 

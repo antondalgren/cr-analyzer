@@ -59,8 +59,7 @@ describe CRA::Workspace do
       path = File.join(dir, "highlight.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "foo", 2)

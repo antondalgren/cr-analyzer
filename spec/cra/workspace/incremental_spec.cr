@@ -44,8 +44,7 @@ describe CRA::Workspace do
         end
       CRYSTAL
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       child_node = Crystal::Parser.new(File.read(child_path)).parse
       call_node = find_first(child_node) do |n|
@@ -105,8 +104,7 @@ describe CRA::Workspace do
         end
       CRYSTAL
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       child_node = Crystal::Parser.new(File.read(child_path)).parse
       call_node = find_first(child_node) do |n|

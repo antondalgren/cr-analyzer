@@ -169,6 +169,9 @@ module CRA
         "textDocument/signatureHelp" => SignatureHelpRequest,
         "textDocument/documentHighlight" => DocumentHighlightRequest,
         "textDocument/selectionRange" => SelectionRangeRequest,
+        "textDocument/prepareCallHierarchy" => CallHierarchyPrepareRequest,
+        "callHierarchy/incomingCalls" => CallHierarchyIncomingCallsRequest,
+        "callHierarchy/outgoingCalls" => CallHierarchyOutgoingCallsRequest,
         "textDocument/prepareRename" => PrepareRenameRequest,
         "textDocument/inlineValue"  => InlineValueRequest,
         "textDocument/declaration"  => DeclarationRequest,
@@ -222,6 +225,7 @@ module CRA
         "window/logMessage"           => LogMessageNotification,
         "$/cancelRequest"             => CancelRequestNotification,
         "$/setTrace"                  => SetTraceNotification,
+        "textDocument/publishDiagnostics" => PublishDiagnosticsNotification,
       }
     end
 
@@ -256,7 +260,10 @@ module CRA
     # results are captured via JSON::Any.
     alias DefinitionResult = Location | Locations | LocationLinks
     alias ReferencesResult = Array(Location)
-    alias ResponseResult = InitializeResult | CompletionList | CompletionItem | Hover | SignatureHelp | DefinitionResult | ReferencesResult | DocumentSymbols | SymbolInformations | DocumentHighlights | SelectionRanges | InlineValues | Range | WorkspaceEdit | TextEdits | DocumentDiagnosticReport | WorkspaceDiagnosticReport | MessageActionItem | JSON::Any
+    alias CallHierarchyItems = Array(CallHierarchyItem)
+    alias CallHierarchyIncomingCalls = Array(CallHierarchyIncomingCall)
+    alias CallHierarchyOutgoingCalls = Array(CallHierarchyOutgoingCall)
+    alias ResponseResult = InitializeResult | CompletionList | CompletionItem | Hover | SignatureHelp | DefinitionResult | ReferencesResult | DocumentSymbols | SymbolInformations | DocumentHighlights | SelectionRanges | InlineValues | CallHierarchyItems | CallHierarchyIncomingCalls | CallHierarchyOutgoingCalls | Range | WorkspaceEdit | TextEdits | DocumentDiagnosticReport | WorkspaceDiagnosticReport | MessageActionItem | JSON::Any
 
     class Response < Message
       include JSON::Serializable
@@ -1962,6 +1969,17 @@ module CRA
 
     alias DocumentDiagnosticReport = DocumentDiagnosticReportFull | DocumentDiagnosticReportUnchanged
 
+    class PublishDiagnosticsParams
+      include JSON::Serializable
+
+      property uri : DocumentUri
+      property version : Int32?
+      property diagnostics : Array(Diagnostic)
+
+      def initialize(@uri : DocumentUri, @diagnostics : Array(Diagnostic), @version : Int32? = nil)
+      end
+    end
+
     class DocumentDiagnosticParams
       include JSON::Serializable
 
@@ -2970,6 +2988,24 @@ module CRA
       property positions : Array(Position)
     end
 
+    class CallHierarchyPrepareRequest < Request
+      @[JSON::Field(nested: "params", key: "textDocument")]
+      property text_document : TextDocumentIdentifier
+
+      @[JSON::Field(nested: "params", key: "position")]
+      property position : Position
+    end
+
+    class CallHierarchyIncomingCallsRequest < Request
+      @[JSON::Field(nested: "params", key: "item")]
+      property item : CallHierarchyItem
+    end
+
+    class CallHierarchyOutgoingCallsRequest < Request
+      @[JSON::Field(nested: "params", key: "item")]
+      property item : CallHierarchyItem
+    end
+
     class InlineValueRequest < Request
       @[JSON::Field(nested: "params", key: "textDocument")]
       property text_document : TextDocumentIdentifier
@@ -3200,6 +3236,22 @@ module CRA
 
       def initialize(@text_document : TextDocumentIdentifier, @text : String? = nil)
         @method = "textDocument/didSave"
+      end
+    end
+
+    class PublishDiagnosticsNotification < Notification
+      @[JSON::Field(nested: "params", key: "uri")]
+      property uri : DocumentUri
+      @[JSON::Field(nested: "params", key: "version")]
+      property version : Int32?
+      @[JSON::Field(nested: "params", key: "diagnostics")]
+      property diagnostics : Array(Diagnostic)
+
+      def initialize(params : PublishDiagnosticsParams)
+        @method = "textDocument/publishDiagnostics"
+        @uri = params.uri
+        @version = params.version
+        @diagnostics = params.diagnostics
       end
     end
 

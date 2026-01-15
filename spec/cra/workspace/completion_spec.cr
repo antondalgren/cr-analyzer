@@ -63,8 +63,7 @@ describe CRA::Workspace do
       path = File.join(dir, "main.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "greeter.gr") + "greeter.gr".size
@@ -95,8 +94,7 @@ describe CRA::Workspace do
       path = File.join(dir, "box.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "@ba") + "@ba".size
@@ -120,8 +118,7 @@ describe CRA::Workspace do
       path = File.join(dir, "demo.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "ret") + "ret".size
@@ -144,8 +141,7 @@ describe CRA::Workspace do
       path = File.join(dir, "class_body.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "de") + "de".size
@@ -170,8 +166,7 @@ describe CRA::Workspace do
       path = File.join(dir, "if_body.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "el") + "el".size
@@ -197,8 +192,7 @@ describe CRA::Workspace do
       path = File.join(dir, "case_body.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "when") + "wh".size
@@ -228,8 +222,7 @@ describe CRA::Workspace do
       path = File.join(dir, "demo.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "Ar", 1) + "Ar".size
@@ -253,8 +246,7 @@ describe CRA::Workspace do
       path = File.join(dir, "if_condition.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "if true") + "if ".size
@@ -280,8 +272,7 @@ describe CRA::Workspace do
       path = File.join(dir, "alias.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "Tok") + "Tok".size
@@ -309,8 +300,7 @@ describe CRA::Workspace do
       path = File.join(dir, "generic.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "Array(Int32).na") + "Array(Int32).na".size
@@ -347,8 +337,7 @@ describe CRA::Workspace do
       path = File.join(dir, "container.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "container.value.p") + "container.value.p".size
@@ -385,8 +374,7 @@ describe CRA::Workspace do
       path = File.join(dir, "buffer_index.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "container[1].") + "container[1].".size
@@ -423,8 +411,7 @@ describe CRA::Workspace do
       path = File.join(dir, "array_index.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "items[1].") + "items[1].".size
@@ -449,8 +436,7 @@ describe CRA::Workspace do
       path = File.join(dir, "main.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "foo/ba") + "foo/ba".size

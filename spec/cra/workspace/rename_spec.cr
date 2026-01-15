@@ -56,8 +56,7 @@ describe CRA::Workspace do
       path = File.join(dir, "rename_local.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "foo", 1)
@@ -98,8 +97,7 @@ describe CRA::Workspace do
       path = File.join(dir, "rename_ivar.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "@count", 1)
@@ -131,8 +129,7 @@ describe CRA::Workspace do
       path = File.join(dir, "rename_method.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "greet(\"hi\")")
@@ -163,8 +160,7 @@ describe CRA::Workspace do
       path = File.join(dir, "rename_type.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "Greeter.new", 0)
@@ -197,8 +193,7 @@ describe CRA::Workspace do
       path = File.join(dir, "rename_enum_member.cr")
       File.write(path, code)
 
-      ws = CRA::Workspace.from_s("file://#{dir}")
-      ws.scan
+      ws = workspace_for(dir)
 
       uri = "file://#{path}"
       index = index_for(code, "Red", 0)

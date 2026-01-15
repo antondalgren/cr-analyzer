@@ -13,6 +13,8 @@ dependencies:
     github: icyleaf/markd
   reply:
     github: I3oris/reply
+  facet:
+    github: mikeoz32/facet
 
 crystal: ">= 1.18.2"
 

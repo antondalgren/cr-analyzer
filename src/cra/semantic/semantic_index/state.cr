@@ -27,6 +27,18 @@ module CRA::Psi
     @reverse_dependencies : Hash(String, Hash(String, Bool)) = {} of String => Hash(String, Bool)
     @dependency_sources : Hash(String, Hash(String, Hash(String, Bool))) = {} of String => Hash(String, Hash(String, Bool))
     @deps_by_file : Hash(String, Array(DependencyEdge)) = {} of String => Array(DependencyEdge)
+    @call_graph : Hash(String, Array(CallEdge)) = {} of String => Array(CallEdge)
+    @reverse_call_graph : Hash(String, Array(CallEdge)) = {} of String => Array(CallEdge)
+    @method_by_key : Hash(String, CRA::Psi::Method) = {} of String => CRA::Psi::Method
+    @methods_by_file : Hash(String, Array(CRA::Psi::Method)) = {} of String => Array(CRA::Psi::Method)
+
+    struct CallEdge
+      getter target_key : String
+      getter location : CRA::Psi::Location?
+
+      def initialize(@target_key : String, @location : CRA::Psi::Location?)
+      end
+    end
 
     struct TypeDefinition
       getter kind : Symbol
