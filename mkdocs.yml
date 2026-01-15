@@ -1,0 +1,17 @@
+site_name: cr-analyzer
+site_description: Lightweight LSP server for Crystal with fast semantic indexing.
+site_url: https://mikeoz32.github.io/cr-analyzer
+repo_url: https://github.com/mikeoz32/cr-analyzer
+repo_name: mikeoz32/cr-analyzer
+docs_dir: docs
+theme:
+  name: readthedocs
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - Semantic Index: semantic-index.md
+  - LSP Server: lsp-server.md
+  - Roadmap: roadmap.md
+markdown_extensions:
+  - tables
+  - admonition

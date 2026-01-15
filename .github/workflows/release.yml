@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Crystal
+        uses: crystallang/install-crystal@v1
+        with:
+          crystal: 1.18.2
+
+      - name: Install shards
+        run: shards install
+
+      - name: Run specs
+        run: crystal spec
+
+      - name: Build release binary
+        run: shards build --release
+
+      - name: Package artifacts
+        run: |
+          mkdir -p dist
+          cp bin/cr-analyzer dist/cr-analyzer-linux-x64
+          cd dist
+          sha256sum cr-analyzer-linux-x64 > SHA256SUMS
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

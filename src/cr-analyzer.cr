@@ -104,6 +104,18 @@ module CRA
         nil
       end
 
+      def handle(request : Types::ReferencesRequest)
+        Log.error { "Handling references request" }
+        @workspace.try do |ws|
+          refs = ws.find_references(request)
+          return Types::Response.new(request.id, refs)
+        end
+        Types::Response.new(request.id, [] of Types::Location)
+      rescue ex
+        Log.error { "Error handling request: #{ex.message}" }
+        nil
+      end
+
       def handle(request : Types::CallHierarchyPrepareRequest)
         Log.error { "Handling call hierarchy prepare request" }
         @workspace.try do |ws|

@@ -670,6 +670,16 @@ module CRA::Psi
       "#{owner_name}#{separator}#{method.name}"
     end
 
+    # Returns direct ancestor methods for a given method (superclasses/included modules).
+    def super_methods_for(method : CRA::Psi::Method) : Array(CRA::Psi::Method)
+      owner = method.owner
+      return [] of CRA::Psi::Method unless owner
+      return [] of CRA::Psi::Method unless type = find_type(owner.name)
+      results = find_methods_with_ancestors(type, method.name, method.class_method)
+      results.reject! { |m| m.location == method.location }
+      results
+    end
+
     private def remove_method(method : CRA::Psi::Method)
       key = method_key(method)
       @method_by_key.delete(key)

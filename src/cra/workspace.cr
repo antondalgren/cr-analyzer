@@ -474,9 +474,11 @@ module CRA
       when Crystal::Arg
         references_for_local(node.name, finder.enclosing_def, request.text_document.uri, include_decl)
       when Crystal::InstanceVar
-        references_for_instance_var(node.name, finder.enclosing_class, request.text_document.uri)
+        references_for_instance_var(node.name, finder.enclosing_class, request.text_document.uri, include_decl)
       when Crystal::ClassVar
-        references_for_class_var(node.name, finder.enclosing_class, request.text_document.uri)
+        references_for_class_var(node.name, finder.enclosing_class, request.text_document.uri, include_decl)
+      when Crystal::Call, Crystal::Def
+        references_for_method(node, finder, request.text_document.uri, include_decl)
       when Crystal::Path
         refs = references_for_path(node.full, node.global?, document.program, request.text_document.uri)
         refs.concat(@analyzer.references_for_path(node.full, finder.enclosing_type_name, request.text_document.uri))
@@ -799,7 +801,7 @@ module CRA
       locations_for_nodes(collector.nodes, uri)
     end
 
-    private def references_for_instance_var(name : String, scope_class : Crystal::ClassDef?, uri : String) : Array(Types::Location)
+    private def references_for_instance_var(name : String, scope_class : Crystal::ClassDef?, uri : String, include_decl : Bool) : Array(Types::Location)
       return [] of Types::Location unless scope_class
 
       collector = NameHighlightCollector.new(name, ivar: true)
@@ -807,12 +809,62 @@ module CRA
       locations_for_nodes(collector.nodes, uri)
     end
 
-    private def references_for_class_var(name : String, scope_class : Crystal::ClassDef?, uri : String) : Array(Types::Location)
+    private def references_for_class_var(name : String, scope_class : Crystal::ClassDef?, uri : String, include_decl : Bool) : Array(Types::Location)
       return [] of Types::Location unless scope_class
 
       collector = NameHighlightCollector.new(name, cvar: true)
       scope_class.body.accept(collector)
       locations_for_nodes(collector.nodes, uri)
+    end
+
+    private def references_for_method(node : Crystal::ASTNode, finder : NodeFinder, uri : String, include_decl : Bool) : Array(Types::Location)
+      definitions = @analyzer.find_definitions(
+        node,
+        finder.enclosing_type_name,
+        finder.enclosing_def,
+        finder.enclosing_class,
+        finder.cursor_location,
+        uri
+      )
+      target_keys = method_keys_for(definitions)
+      return [] of Types::Location if target_keys.empty?
+      references_for_methods_in_workspace(target_keys, include_decl)
+    end
+
+    private def references_for_methods_in_workspace(
+      target_keys : Hash(String, Bool),
+      include_decl : Bool
+    ) : Array(Types::Location)
+      locations = [] of Types::Location
+      seen = {} of String => Bool
+      workspace_file_uris.each do |file_uri|
+        program = program_for_uri(file_uri)
+        next unless program
+
+        collector = MethodRenameCollector.new(@analyzer, file_uri, target_keys)
+        program.accept(collector)
+
+        if include_decl
+          collector.def_nodes.each do |def_node|
+            if range = def_name_range(def_node)
+              key = "#{file_uri}:#{range.start_position.line}:#{range.start_position.character}:#{range.end_position.line}:#{range.end_position.character}"
+              next if seen[key]?
+              seen[key] = true
+              locations << Types::Location.new(uri: file_uri, range: range)
+            end
+          end
+        end
+
+        collector.call_nodes.each do |call_node|
+          if range = call_name_range(call_node)
+            key = "#{file_uri}:#{range.start_position.line}:#{range.start_position.character}:#{range.end_position.line}:#{range.end_position.character}"
+            next if seen[key]?
+            seen[key] = true
+            locations << Types::Location.new(uri: file_uri, range: range)
+          end
+        end
+      end
+      locations
     end
 
     private def references_for_path(full_name : String, global : Bool, program : Crystal::ASTNode?, uri : String) : Array(Types::Location)
