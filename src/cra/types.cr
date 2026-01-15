@@ -196,6 +196,9 @@ module CRA
         "textDocument/definition"   => DefinitionRequest,
         "textDocument/typeDefinition" => TypeDefinitionRequest,
         "textDocument/implementation" => ImplementationRequest,
+        "textDocument/prepareTypeHierarchy" => TypeHierarchyPrepareRequest,
+        "typeHierarchy/supertypes"  => TypeHierarchySupertypesRequest,
+        "typeHierarchy/subtypes"    => TypeHierarchySubtypesRequest,
         "textDocument/references"   => ReferencesRequest,
         "textDocument/documentSymbol" => DocumentSymbolRequest,
         "workspace/symbol"          => WorkspaceSymbolRequest,
@@ -279,9 +282,10 @@ module CRA
     alias DefinitionResult = Location | Locations | LocationLinks
     alias ReferencesResult = Array(Location)
     alias CallHierarchyItems = Array(CallHierarchyItem)
+    alias TypeHierarchyItems = Array(TypeHierarchyItem)
     alias CallHierarchyIncomingCalls = Array(CallHierarchyIncomingCall)
     alias CallHierarchyOutgoingCalls = Array(CallHierarchyOutgoingCall)
-    alias ResponseResult = InitializeResult | CompletionList | CompletionItem | Hover | SignatureHelp | DefinitionResult | ReferencesResult | DocumentSymbols | SymbolInformations | DocumentHighlights | SelectionRanges | InlineValues | CallHierarchyItems | CallHierarchyIncomingCalls | CallHierarchyOutgoingCalls | Range | WorkspaceEdit | TextEdits | DocumentDiagnosticReport | WorkspaceDiagnosticReport | MessageActionItem | JSON::Any
+    alias ResponseResult = InitializeResult | CompletionList | CompletionItem | Hover | SignatureHelp | DefinitionResult | ReferencesResult | DocumentSymbols | SymbolInformations | DocumentHighlights | SelectionRanges | InlineValues | CallHierarchyItems | CallHierarchyIncomingCalls | CallHierarchyOutgoingCalls | TypeHierarchyItems | Range | WorkspaceEdit | TextEdits | DocumentDiagnosticReport | WorkspaceDiagnosticReport | MessageActionItem | JSON::Any
 
     class Response < Message
       include JSON::Serializable
@@ -2704,6 +2708,51 @@ module CRA
 
       def initialize(@name : String, @kind : SymbolKind, @uri : DocumentUri, @range : Range, @selection_range : Range, @tags : Array(SymbolTag)? = nil, @detail : String? = nil, @data : JSON::Any? = nil)
       end
+    end
+
+    class TypeHierarchyPrepareRequest < Request
+      @[JSON::Field(nested: "params", key: "textDocument")]
+      property text_document : TextDocumentIdentifier
+
+      @[JSON::Field(nested: "params", key: "position")]
+      property position : Position
+
+      def initialize(@method : String, @id : IntegerOrString, @text_document : TextDocumentIdentifier, @position : Position)
+      end
+    end
+
+    class TypeHierarchySupertypesRequest < Request
+      @[JSON::Field(nested: "params", key: "item")]
+      property item : TypeHierarchyItem
+
+      def initialize(@method : String, @id : IntegerOrString, @item : TypeHierarchyItem)
+      end
+    end
+
+    class TypeHierarchySubtypesRequest < Request
+      @[JSON::Field(nested: "params", key: "item")]
+      property item : TypeHierarchyItem
+
+      def initialize(@method : String, @id : IntegerOrString, @item : TypeHierarchyItem)
+      end
+    end
+
+    class TypeHierarchyPrepareRequest < Request
+      @[JSON::Field(nested: "params", key: "textDocument")]
+      property text_document : TextDocumentIdentifier
+
+      @[JSON::Field(nested: "params", key: "position")]
+      property position : Position
+    end
+
+    class TypeHierarchySupertypesRequest < Request
+      @[JSON::Field(nested: "params", key: "item")]
+      property item : TypeHierarchyItem
+    end
+
+    class TypeHierarchySubtypesRequest < Request
+      @[JSON::Field(nested: "params", key: "item")]
+      property item : TypeHierarchyItem
     end
 
     class InlineValueText

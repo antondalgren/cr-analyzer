@@ -459,6 +459,56 @@ module CRA
       calls
     end
 
+    def prepare_type_hierarchy(request : Types::TypeHierarchyPrepareRequest) : Array(Types::TypeHierarchyItem)
+      document = document(request.text_document.uri)
+      return [] of Types::TypeHierarchyItem unless document
+
+      finder = document.node_context(request.position)
+      node = finder.node || finder.previous_node
+      return [] of Types::TypeHierarchyItem unless node
+
+      definitions = case node
+                    when Crystal::Path, Crystal::Generic, Crystal::ClassDef, Crystal::ModuleDef, Crystal::EnumDef
+                      @analyzer.find_definitions(
+                        node,
+                        finder.enclosing_type_name,
+                        finder.enclosing_def,
+                        finder.enclosing_class,
+                        finder.cursor_location,
+                        request.text_document.uri
+                      )
+                    else
+                      [] of Psi::PsiElement
+                    end
+      items = [] of Types::TypeHierarchyItem
+      definitions.each do |definition|
+        if item = type_hierarchy_item(definition)
+          items << item
+        end
+      end
+      items
+    end
+
+    def type_hierarchy_supertypes(request : Types::TypeHierarchySupertypesRequest) : Array(Types::TypeHierarchyItem)
+      items = [] of Types::TypeHierarchyItem
+      @analyzer.type_hierarchy_supertypes(request.item.name).each do |element|
+        if item = type_hierarchy_item(element)
+          items << item
+        end
+      end
+      items
+    end
+
+    def type_hierarchy_subtypes(request : Types::TypeHierarchySubtypesRequest) : Array(Types::TypeHierarchyItem)
+      items = [] of Types::TypeHierarchyItem
+      @analyzer.type_hierarchy_subtypes(request.item.name).each do |element|
+        if item = type_hierarchy_item(element)
+          items << item
+        end
+      end
+      items
+    end
+
     def find_references(request : Types::ReferencesRequest) : Array(Types::Location)
       document = document(request.text_document.uri)
       return [] of Types::Location unless document
@@ -1006,6 +1056,22 @@ module CRA
       uri = file.starts_with?("file://") ? file : "file://#{file}"
       range = loc.to_range
       Types::CallHierarchyItem.new(
+        name: element.name,
+        kind: symbol_kind_for(element),
+        uri: uri,
+        range: range,
+        selection_range: range,
+        detail: element.responds_to?(:owner) ? element.owner.try(&.name) : nil
+      )
+    end
+
+    private def type_hierarchy_item(element : Psi::PsiElement) : Types::TypeHierarchyItem?
+      loc = element.location
+      file = element.file
+      return nil unless loc && file
+      uri = file.starts_with?("file://") ? file : "file://#{file}"
+      range = loc.to_range
+      Types::TypeHierarchyItem.new(
         name: element.name,
         kind: symbol_kind_for(element),
         uri: uri,

@@ -21,10 +21,11 @@ The server runs over stdio (stdin/stdout) and uses JSON-RPC.
 - workspace/symbol
 - textDocument/diagnostic (pull) + publishDiagnostics (push)
 - callHierarchy/prepare, incomingCalls, outgoingCalls
+- typeHierarchy/prepare, supertypes, subtypes
 
 ## Capabilities status
 
-ServerCapabilities are kept in sync with implemented handlers. Notable gaps: semantic tokens, code actions/lens, formatting, type hierarchy, document links, code actions/formatting, inlay hints, moniker.
+ServerCapabilities are kept in sync with implemented handlers. Notable gaps: semantic tokens, code actions/lens, formatting, document links, code actions/formatting, inlay hints, moniker.
 
 ## Completion providers
 

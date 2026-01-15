@@ -13,9 +13,9 @@ Legend:
 - [x] Prepare Call Hierarchy
 - [x] Call Hierarchy Incoming Calls
 - [x] Call Hierarchy Outgoing Calls
-- [ ] Prepare Type Hierarchy
-- [ ] Type Hierarchy Super Types
-- [ ] Type Hierarchy Sub Types
+- [x] Prepare Type Hierarchy
+- [x] Type Hierarchy Super Types
+- [x] Type Hierarchy Sub Types
 - [x] Document Highlight
 - [ ] Document Link
 - [ ] Document Link Resolve

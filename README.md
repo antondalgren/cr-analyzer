@@ -25,6 +25,7 @@ Active development. Implemented LSP features include completion (with resolve), 
 - Selection ranges based on AST nesting.
 - Inline values (variables in range).
 - Call hierarchy (incoming/outgoing).
+- Type hierarchy (prepare/super/sub types).
 - Rename (prepare + apply; best-effort for locals, ivars, methods, type paths in workspace).
 - Diagnostics:
   - Syntax/parser errors (Crystal parser or facet parser fallback).

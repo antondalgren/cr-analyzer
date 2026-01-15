@@ -660,6 +660,79 @@ module CRA::Psi
       results
     end
 
+    def type_hierarchy_supertypes(name : String) : Array(PsiElement)
+      name = canonical_name(name)
+      element = find_type(name)
+      return [] of PsiElement unless element
+
+      results = [] of PsiElement
+      case element
+      when CRA::Psi::Class
+        if super_node = @class_superclass[element.name]?
+          if resolved = resolve_type_node(super_node, element.name)
+            if super_elem = find_type(resolved.name)
+              results << super_elem
+            else
+              results.concat(type_definition_elements(resolved.name))
+            end
+          end
+        else
+          if default_super = find_type("Reference") || find_type("Object")
+            results << default_super
+          end
+        end
+
+        if includes = @class_includes[element.name]?
+          includes.each do |inc|
+            if resolved = resolve_type_node(inc, element.name)
+              if inc_elem = find_type(resolved.name)
+                results << inc_elem
+              end
+            end
+          end
+        end
+      when CRA::Psi::Module
+        if includes = @module_includes[element.name]?
+          includes.each do |inc|
+            if resolved = resolve_type_node(inc, element.name)
+              if inc_elem = find_type(resolved.name)
+                results << inc_elem
+              end
+            end
+          end
+        end
+      end
+
+      dedupe_types(results)
+    end
+
+    def type_hierarchy_subtypes(name : String) : Array(PsiElement)
+      name = canonical_name(name)
+      element = find_type(name)
+      return [] of PsiElement unless element
+
+      results = [] of PsiElement
+      if element.is_a?(CRA::Psi::Class)
+        results.concat(subclasses_for(element.name))
+      elsif element.is_a?(CRA::Psi::Module)
+        results.concat(includers_for(element.name))
+      end
+      dedupe_types(results)
+    end
+
+    private def dedupe_types(types : Array(PsiElement)) : Array(PsiElement)
+      seen = {} of String => Bool
+      types.select do |t|
+        next false unless name = t.try(&.name)
+        unless seen[name]?
+          seen[name] = true
+          true
+        else
+          false
+        end
+      end
+    end
+
     private def canonical_name(name : String) : String
       name.starts_with?("::") ? name[2..] : name
     end
