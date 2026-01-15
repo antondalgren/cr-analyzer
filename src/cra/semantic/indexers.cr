@@ -323,6 +323,16 @@ module CRA::Psi
       end
 
       def visit(node : Crystal::Call) : Bool
+        call_loc = @index.location_for(node)
+
+        if (node.obj.nil? && node.name == "super") || (node.obj.nil? && node.name == "previous_def")
+          @index.super_methods_for(@from_method).each do |target|
+            @index.record_call(@from_method, target, call_loc)
+          end
+          node.accept_children(self)
+          return false
+        end
+
         targets = @index.find_definitions(
           node,
           @context_name,
@@ -333,7 +343,6 @@ module CRA::Psi
         )
         targets.each do |target|
           if method = target.as?(CRA::Psi::Method)
-            call_loc = @index.location_for(node)
             @index.record_call(@from_method, method, call_loc)
           end
         end

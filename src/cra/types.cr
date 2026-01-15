@@ -92,6 +92,24 @@ module CRA
       end
     end
 
+    # Symbol kinds are numeric in LSP; accept both ints and strings.
+    module SymbolKindConverter
+      def self.from_json(pull : JSON::PullParser)
+        case pull.kind
+        when JSON::PullParser::Kind::Int
+          SymbolKind.from_value(pull.read_int.to_i32)
+        when JSON::PullParser::Kind::String
+          SymbolKind.parse(pull.read_string)
+        else
+          pull.raise "Expected int or string for SymbolKind"
+        end
+      end
+
+      def self.to_json(value : SymbolKind, json : JSON::Builder)
+        json.number(value.to_i)
+      end
+    end
+
     module ErrorCodes
       ERROR_CODE_INVALID_REQUEST  = -32600
       ERROR_CODE_METHOD_NOT_FOUND = -32601
@@ -2565,6 +2583,7 @@ module CRA
       include JSON::Serializable
 
       property name : String
+      @[JSON::Field(converter: ::CRA::Types::SymbolKindConverter)]
       property kind : SymbolKind
       property tags : Array(SymbolTag)?
       property location : Location
@@ -2580,6 +2599,7 @@ module CRA
 
       property name : String
       property detail : String?
+      @[JSON::Field(converter: ::CRA::Types::SymbolKindConverter)]
       property kind : SymbolKind
       property tags : Array(SymbolTag)?
       @[JSON::Field(key: "deprecated")]
@@ -2632,6 +2652,7 @@ module CRA
       include JSON::Serializable
 
       property name : String
+      @[JSON::Field(converter: ::CRA::Types::SymbolKindConverter)]
       property kind : SymbolKind
       property tags : Array(SymbolTag)?
       property detail : String?
@@ -2671,6 +2692,7 @@ module CRA
       include JSON::Serializable
 
       property name : String
+      @[JSON::Field(converter: ::CRA::Types::SymbolKindConverter)]
       property kind : SymbolKind
       property tags : Array(SymbolTag)?
       property detail : String?

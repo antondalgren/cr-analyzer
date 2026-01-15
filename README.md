@@ -67,6 +67,15 @@ shards build
 
 3. Configure your editor to launch the command above as an LSP server.
 
+### Documentation site
+
+- Hosted docs (GitHub Pages): https://mikeoz32.github.io/cr-analyzer
+- Local preview with MkDocs:
+  ```
+  pip install mkdocs
+  mkdocs serve
+  ```
+
 ### stdlib scanning
 
 The server uses CRYSTAL_PATH or CRYSTAL_HOME to locate the stdlib. If unset it falls back to /usr/share/crystal/src.
