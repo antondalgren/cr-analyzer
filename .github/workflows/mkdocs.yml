@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: "3.x"
       - name: Install MkDocs
-        run: pip install mkdocs
+        run: pip install mkdocs mkdocs-material
       - name: Build site
         run: mkdocs build --strict
       - name: Upload artifact

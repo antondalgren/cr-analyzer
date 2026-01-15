@@ -5,7 +5,24 @@ repo_url: https://github.com/mikeoz32/cr-analyzer
 repo_name: mikeoz32/cr-analyzer
 docs_dir: docs
 theme:
-  name: readthedocs
+  name: material
+  language: en
+  palette:
+    - scheme: default
+      primary: teal
+      accent: amber
+    - scheme: slate
+      primary: teal
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.instant
+    - search.suggest
+    - content.code.copy
 nav:
   - Home: index.md
   - Architecture: architecture.md
@@ -15,3 +32,5 @@ nav:
 markdown_extensions:
   - tables
   - admonition
+  - toc:
+      permalink: true

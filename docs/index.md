@@ -37,7 +37,7 @@ Uses `CRYSTAL_PATH` or `CRYSTAL_HOME`; falls back to `/usr/share/crystal/src`.
 ## Local docs preview
 
 ```bash
-pip install mkdocs
+pip install mkdocs mkdocs-material
 mkdocs serve
 ```
 

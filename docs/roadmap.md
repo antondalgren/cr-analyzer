@@ -9,10 +9,10 @@ Legend:
 - [x] Go to Definition
 - [x] Go to Type Definition
 - [x] Go to Implementation
-- [ ] Find References
-- [ ] Prepare Call Hierarchy
-- [ ] Call Hierarchy Incoming Calls
-- [ ] Call Hierarchy Outgoing Calls
+- [x] Find References
+- [x] Prepare Call Hierarchy
+- [x] Call Hierarchy Incoming Calls
+- [x] Call Hierarchy Outgoing Calls
 - [ ] Prepare Type Hierarchy
 - [ ] Type Hierarchy Super Types
 - [ ] Type Hierarchy Sub Types
@@ -26,7 +26,7 @@ Legend:
 - [x] Selection Range
 - [x] Document Symbols
 - [ ] Semantic Tokens
-- [ ] Inline Value
+- [x] Inline Value
 - [ ] Inline Value Refresh
 - [ ] Inlay Hint
 - [ ] Inlay Hint Resolve
@@ -34,8 +34,8 @@ Legend:
 - [ ] Moniker
 - [x] Completion Proposals
 - [x] Completion Item Resolve
-- [ ] Publish Diagnostics
-- [ ] Pull Diagnostics
+- [x] Publish Diagnostics
+- [x] Pull Diagnostics
 - [x] Signature Help
 - [ ] Code Action
 - [ ] Code Action Resolve
@@ -44,6 +44,6 @@ Legend:
 - [ ] Formatting
 - [ ] Range Formatting
 - [ ] On type Formatting
-- [~] Rename
+- [x] Rename
 - [x] Prepare Rename
 - [ ] Linked Editing Range

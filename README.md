@@ -72,7 +72,7 @@ shards build
 - Hosted docs (GitHub Pages): https://mikeoz32.github.io/cr-analyzer
 - Local preview with MkDocs:
   ```
-  pip install mkdocs
+  pip install mkdocs mkdocs-material
   mkdocs serve
   ```
 

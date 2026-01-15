@@ -4,30 +4,40 @@
 
 The server runs over stdio (stdin/stdout) and uses JSON-RPC.
 
-## Implemented requests
+## Implemented requests / notifications
 
-- initialize
-- textDocument/didOpen
-- textDocument/didChange (full text)
-- textDocument/didSave (full text)
-- textDocument/completion
-- completionItem/resolve
-- textDocument/definition
+- initialize / shutdown / exit
+- textDocument/didOpen, didChange (full text), didSave, didClose
+- textDocument/completion (+ completionItem/resolve)
 - textDocument/hover
-
-Document symbols are implemented in DocumentSymbolsIndex and advertised in capabilities.
+- textDocument/signatureHelp
+- textDocument/definition, declaration, typeDefinition, implementation
+- textDocument/references
+- textDocument/documentHighlight
+- textDocument/selectionRange
+- textDocument/inlineValue (push + pull)
+- textDocument/prepareRename, rename
+- textDocument/documentSymbol
+- workspace/symbol
+- textDocument/diagnostic (pull) + publishDiagnostics (push)
+- callHierarchy/prepare, incomingCalls, outgoingCalls
 
 ## Capabilities status
 
-ServerCapabilities currently advertises references, rename, typeDefinition, implementation, and workspaceSymbol, but handlers are not implemented yet. Keep this list in sync when adding support.
+ServerCapabilities are kept in sync with implemented handlers. Notable gaps: semantic tokens, code actions/lens, formatting, type hierarchy, document links, code actions/formatting, inlay hints, moniker.
 
 ## Completion providers
 
-- CRA::Psi::SemanticIndex
-- CRA::KeywordCompletionProvider
-- CRA::RequirePathCompletionProvider
+- `CRA::Psi::SemanticIndex` (types, methods, vars, enum members, aliases, require paths for stdlib/lib/workspace)
+- `CRA::KeywordCompletionProvider`
+- `CRA::RequirePathCompletionProvider`
+
+## Diagnostics
+
+- Default: Facet parser/diagnostics with syntax errors and lint-style warnings (TODO/FIXME, empty rescue, trailing whitespace, duplicate require, missing final newline, mixed indentation, unused args/block args).
+- Fallback: Crystal parser only when `CRA_DISABLE_FACET_DIAGNOSTICS=1`.
 
 ## Manual testing
 
-- uv run main.py (requires the Python env in pyproject.toml)
+- Quick client harness: `uv run main.py` (uses `pyproject.toml` env).
 - Logs are written to stderr.

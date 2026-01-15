@@ -30,9 +30,11 @@ find_definitions resolves:
 - types and namespaces (Path, Generic)
 - enum members
 - aliases
-- methods with arity filtering, including inherited methods
+- methods with arity filtering, including inherited methods (including class vs instance, includes, superclasses)
 - locals, instance vars, class vars
 - constructors (new -> initialize/self.new)
+- call hierarchy edges (outgoing/incoming) via resolved calls
+- references for types/aliases across files (path matching)
 
 ## Dependencies
 
