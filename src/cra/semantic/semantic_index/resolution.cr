@@ -83,6 +83,11 @@ module CRA::Psi
       results = [] of PsiElement
       type_env : TypeEnv? = nil
       case node
+      when Crystal::Union
+        type_refs = type_refs_for_node(node, context, scope_def, scope_class, cursor)
+        type_refs.each do |type_ref|
+          results.concat(type_definition_elements_for(type_ref, context, current_file))
+        end
       when Crystal::ModuleDef
         if resolved = resolve_path(node.name, context)
           results << resolved
@@ -304,6 +309,12 @@ module CRA::Psi
         if type_ref = type_ref_from_type(node.declared_type)
           refs << type_ref
         end
+      when Crystal::Union
+        node.types.each do |type|
+          if type_ref = type_ref_from_type(type)
+            refs << type_ref
+          end
+        end
       end
 
       if refs.empty?
@@ -320,7 +331,6 @@ module CRA::Psi
     private def collect_type_refs(type_ref : TypeRef, results : Array(TypeRef))
       if type_ref.union?
         type_ref.union_types.each do |member|
-          next if nil_type?(member)
           collect_type_refs(member, results)
         end
         return
@@ -339,7 +349,6 @@ module CRA::Psi
       if type_ref.union?
         results = [] of PsiElement
         type_ref.union_types.each do |member|
-          next if nil_type?(member)
           results.concat(type_definition_elements_for(member, context, current_file, depth + 1))
         end
         return results
@@ -348,6 +357,13 @@ module CRA::Psi
       name = type_ref.name
       return [] of PsiElement unless name
       name = context if name == "self" && context
+
+      if name == "Nil" || name == "::Nil"
+        if defs = type_definition_elements(name)
+          return defs unless defs.empty?
+        end
+        return [CRA::Psi::PsiElement.new(nil, "Nil", nil)]
+      end
 
       if resolved = resolve_type_name(name, context)
         defs = type_definition_elements(resolved.name)

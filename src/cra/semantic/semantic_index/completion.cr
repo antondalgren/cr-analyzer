@@ -4,6 +4,14 @@ module CRA::Psi
       return [] of CRA::Types::CompletionItem if context.require_prefix
 
       trigger = context.trigger_character
+
+       # Named argument completion inside a call.
+      if call = call_for_context(context)
+        if items = complete_named_arguments(context, call)
+          return items unless items.empty?
+        end
+      end
+
       case trigger
       when "."
         prefix = context.member_prefix(trigger)
@@ -27,6 +35,57 @@ module CRA::Psi
       end
 
       complete_general(context)
+    end
+
+    private def call_for_context(context : CRA::CompletionContext) : Crystal::Call?
+      call_node = context.node_path.reverse.find { |n| n.is_a?(Crystal::Call) }
+      call = call_node.try(&.as?(Crystal::Call))
+      call ||= context.node.as?(Crystal::Call)
+      call ||= context.previous_node.as?(Crystal::Call)
+      call
+    end
+
+    private def complete_named_arguments(context : CRA::CompletionContext, call : Crystal::Call) : Array(CRA::Types::CompletionItem)?
+      # Only offer when typing a named arg (prefix before ':' or within args list).
+      return [] of CRA::Types::CompletionItem if context.word_prefix.empty?
+
+      methods = signature_help_methods(
+        call,
+        context.enclosing_type_name,
+        context.enclosing_def,
+        context.enclosing_class,
+        context.cursor_location
+      )
+      return [] of CRA::Types::CompletionItem if methods.empty?
+
+      used = Set(String).new
+      (call.named_args || [] of Crystal::NamedArgument).each do |arg|
+        used << arg.name
+      end
+
+      prefix = context.word_prefix
+      replace_range = replacement_range(context, prefix)
+      items = [] of CRA::Types::CompletionItem
+      seen = Set(String).new
+
+      methods.each do |method|
+        method.parameters.each do |param|
+          next if param.starts_with?("_")
+          next if used.includes?(param)
+          next unless param.starts_with?(prefix)
+          next if seen.includes?(param)
+          seen << param
+          label = "#{param}:"
+          items << CRA::Types::CompletionItem.new(
+            label: label,
+            kind: CRA::Types::CompletionItemKind::Field,
+            detail: method_detail(method),
+            text_edit: CRA::Types::TextEdit.new(replace_range, "#{label} ")
+          )
+        end
+      end
+
+      items
     end
 
     private def add_include(store : Hash(String, Array(Crystal::ASTNode)), owner_name : String, include_node : Crystal::ASTNode)

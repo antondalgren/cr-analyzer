@@ -339,8 +339,10 @@ module CRA
             Log.error { "Error parsing #{uri}: #{ex.message}" }
           end
           ws.reindex_file(uri, program)
-          ws_diag = ws.publish_diagnostics(uri)
-          @server.send(Types::PublishDiagnosticsNotification.new(ws_diag))
+          if should_push_diagnostics?
+            ws_diag = ws.publish_diagnostics(uri)
+            @server.send(Types::PublishDiagnosticsNotification.new(ws_diag))
+          end
         end
         nil
       end
@@ -359,8 +361,10 @@ module CRA
             return nil
           end
           ws.reindex_file(uri, program)
-          ws_diag = ws.publish_diagnostics(uri)
-          @server.send(Types::PublishDiagnosticsNotification.new(ws_diag))
+          if should_push_diagnostics?
+            ws_diag = ws.publish_diagnostics(uri)
+            @server.send(Types::PublishDiagnosticsNotification.new(ws_diag))
+          end
         end
         nil
       end
@@ -382,8 +386,10 @@ module CRA
           else
             ws.reindex_file(uri)
           end
-          ws_diag = ws.publish_diagnostics(uri)
-          @server.send(Types::PublishDiagnosticsNotification.new(ws_diag))
+          if should_push_diagnostics?
+            ws_diag = ws.publish_diagnostics(uri)
+            @server.send(Types::PublishDiagnosticsNotification.new(ws_diag))
+          end
         end
         nil
       end
@@ -434,6 +440,19 @@ module CRA
       rescue ex
         Log.error { "Error handling request: #{ex.message}" }
         nil
+      end
+
+      private def should_push_diagnostics? : Bool
+        diag_cap = @client_capabilities.try(&.text_document).try(&.diagnostic)
+        # If the client advertises diagnostic pull support, avoid push to prevent duplicates.
+        case diag_cap
+        when Bool
+          !diag_cap
+        when Types::DiagnosticClientCapabilities
+          false
+        else
+          true
+        end
       end
 
     end

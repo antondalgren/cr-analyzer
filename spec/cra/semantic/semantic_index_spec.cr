@@ -706,6 +706,21 @@ describe CRA::Psi::SemanticIndex do
     defs_string_at.first.as(CRA::Psi::Method).owner.not_nil!.name.should eq("StringBuffer")
   end
 
+  it "resolves type definitions for union types without Nil" do
+    code = <<-CRYSTAL
+      class Workspace; end
+
+      workspace : Workspace? = nil
+    CRYSTAL
+
+    index, node = build_index(code)
+    union_node = find_first(node) { |n| n.is_a?(Crystal::Union) }.not_nil!
+
+    defs = index.find_definitions(union_node)
+    defs.map(&.name).should contain("Workspace")
+    defs.map(&.name).should contain("Nil")
+  end
+
   it "resolves method definitions from local assignments" do
     code = <<-CRYSTAL
       class StringBuffer

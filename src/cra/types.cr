@@ -2199,6 +2199,8 @@ module CRA
       property folding_range_provider : Bool | FoldingRangeOptions | Nil
       @[JSON::Field(key: "callHierarchyProvider")]
       property call_hierarchy_provider : Bool | CallHierarchyOptions | Nil
+      @[JSON::Field(key: "typeHierarchyProvider")]
+      property type_hierarchy_provider : Bool?
       @[JSON::Field(key: "semanticTokensProvider")]
       property semantic_tokens_provider : SemanticTokensOptions | Bool | Nil
       @[JSON::Field(key: "inlayHintProvider")]
@@ -2242,6 +2244,7 @@ module CRA
                      @selection_range_provider : Bool | SelectionRangeOptions | Nil = nil,
                      @folding_range_provider : Bool | FoldingRangeOptions | Nil = nil,
                      @call_hierarchy_provider : Bool | CallHierarchyOptions | Nil = nil,
+                     @type_hierarchy_provider : Bool? = nil,
                      @semantic_tokens_provider : SemanticTokensOptions | Bool | Nil = nil,
                      @inlay_hint_provider : Bool | InlayHintOptions | Nil = nil,
                      @inline_value_provider : Bool | InlineValueOptions | Nil = nil,
