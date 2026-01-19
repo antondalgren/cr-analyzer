@@ -21,17 +21,4 @@ jobs:
     - name: Run tests
       run: crystal spec
     - name: Build artifact
-      run: shards build --release
-    - name: Package
-      run: |
-        mkdir -p dist
-        cp bin/cr-analyzer dist/cr-analyzer-linux-x64
-        cd dist
-        sha256sum cr-analyzer-linux-x64 > SHA256SUMS
-    - name: Publish
-      uses: softprops/action-gh-release@v1
-      with:
-        files: dist/*
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: crystal build --release
