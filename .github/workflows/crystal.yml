@@ -21,7 +21,7 @@ jobs:
     - name: Run tests
       run: crystal spec
     - name: Build artifact
-      run: crystal build --release
+      run: shards build --release
     - name: Package
       run: |
         mkdir -p dist
