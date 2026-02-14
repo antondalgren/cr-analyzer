@@ -221,6 +221,23 @@ describe CRA::Workspace do
     end
   end
 
+  it "does not flag abstract def params as unused" do
+    with_tmpdir do |dir|
+      code = <<-CR
+      abstract class Foo
+        abstract def foo(a, _b, c)
+        abstract def bar(a : Int32) : String
+      end
+      CR
+      path = File.join(dir, "abstract_args.cr")
+      File.write(path, code)
+      ws = workspace_for(dir)
+
+      params = ws.publish_diagnostics("file://#{path}")
+      params.diagnostics.any? { |d| d.source == "lint" && d.message.includes?("Unused argument") }.should be_false
+    end
+  end
+
   it "hints unused block args" do
     with_tmpdir do |dir|
       code = <<-CR
