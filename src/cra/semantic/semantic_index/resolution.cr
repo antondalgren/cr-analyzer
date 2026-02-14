@@ -104,9 +104,12 @@ module CRA::Psi
         if scope_def
           if def_node = local_definition(scope_def, node.name, cursor)
             file = current_file || @current_file
+            type_env ||= build_type_env(scope_def, scope_class, cursor)
+            local_type = type_env.locals[node.name]?.try(&.display) || ""
             results << CRA::Psi::LocalVar.new(
               file: file,
               name: node.name,
+              type: local_type,
               location: location_for(def_node)
             )
           end

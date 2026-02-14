@@ -66,4 +66,113 @@ describe CRA::Workspace do
       value.should contain("Says hello.")
     end
   end
+
+  it "shows Bool type for local assigned from boolean literal" do
+    code = <<-CRYSTAL
+      def call
+        ipv6_native = false
+        ipv6_native
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_bool.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "ipv6_native", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("ipv6_native : Bool")
+    end
+  end
+
+  it "shows String type for local assigned from string literal" do
+    code = <<-CRYSTAL
+      def call
+        name = "hello"
+        name
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_string.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "name", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("name : String")
+    end
+  end
+
+  it "shows Int32 type for local assigned from integer literal" do
+    code = <<-CRYSTAL
+      def call
+        count = 42
+        count
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_int.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "count", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("count : Int32")
+    end
+  end
+
+  it "shows inferred type for local assigned from .new" do
+    code = <<-CRYSTAL
+      class Greeter
+        def greet(name)
+        end
+      end
+
+      def call
+        greeter = Greeter.new
+        greeter
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_new.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "greeter", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("greeter : Greeter")
+    end
+  end
 end

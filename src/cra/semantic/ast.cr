@@ -157,8 +157,9 @@ module CRA
     end
 
     class LocalVar < PsiElement
+      getter type : String
       getter owner : PsiElement | Nil
-      def initialize(@file : String?, @name : String, @owner : PsiElement | Nil = nil, @location : Location? = nil, @doc : String? = nil)
+      def initialize(@file : String?, @name : String, @type : String = "", @owner : PsiElement | Nil = nil, @location : Location? = nil, @doc : String? = nil)
       end
     end
 

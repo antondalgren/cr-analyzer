@@ -678,6 +678,12 @@ module CRA
       when Psi::ClassVar
         type_name = definition.type.empty? ? "Unknown" : definition.type
         "#{definition.name} : #{type_name}"
+      when Psi::LocalVar
+        if definition.type.empty?
+          definition.name
+        else
+          "#{definition.name} : #{definition.type}"
+        end
       else
         definition.name
       end

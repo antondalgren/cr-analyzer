@@ -44,6 +44,20 @@ module CRA::Psi
 
     private def type_ref_from_value(node : Crystal::ASTNode) : TypeRef?
       case node
+      when Crystal::BoolLiteral
+        TypeRef.named("Bool")
+      when Crystal::NilLiteral
+        TypeRef.named("Nil")
+      when Crystal::StringLiteral
+        TypeRef.named("String")
+      when Crystal::CharLiteral
+        TypeRef.named("Char")
+      when Crystal::SymbolLiteral
+        TypeRef.named("Symbol")
+      when Crystal::RegexLiteral
+        TypeRef.named("Regex")
+      when Crystal::NumberLiteral
+        TypeRef.named(number_literal_type(node))
       when Crystal::Cast
         type_ref_from_type(node.to)
       when Crystal::NilableCast
@@ -70,6 +84,25 @@ module CRA::Psi
         end
       else
         nil
+      end
+    end
+
+    private def number_literal_type(node : Crystal::NumberLiteral) : String
+      case node.kind
+      when :i8  then "Int8"
+      when :i16 then "Int16"
+      when :i32 then "Int32"
+      when :i64 then "Int64"
+      when :i128 then "Int128"
+      when :u8  then "UInt8"
+      when :u16 then "UInt16"
+      when :u32 then "UInt32"
+      when :u64 then "UInt64"
+      when :u128 then "UInt128"
+      when :f32 then "Float32"
+      when :f64 then "Float64"
+      else
+        node.value.includes?('.') ? "Float64" : "Int32"
       end
     end
   end
