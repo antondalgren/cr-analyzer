@@ -95,6 +95,34 @@ module CRA::Psi
       false
     end
 
+    def visit(node : Crystal::MacroIf) : Bool
+      return true if @owner_stack.empty?
+      expand_macro_if_text(node)
+      false
+    end
+
+    private def expand_macro_if_text(node : Crystal::MacroIf)
+      text = String.build { |io| collect_macro_literals(node.then, io) }
+      return if text.blank?
+      begin
+        parser = Crystal::Parser.new(text)
+        parsed = parser.parse
+        parsed.accept(self)
+      rescue
+      end
+    end
+
+    private def collect_macro_literals(node : Crystal::ASTNode, io : IO)
+      case node
+      when Crystal::Expressions
+        node.expressions.each { |e| collect_macro_literals(e, io) }
+      when Crystal::MacroLiteral
+        io << node.value
+      when Crystal::MacroIf
+        collect_macro_literals(node.then, io)
+      end
+    end
+
     private def qualified_name(path : Crystal::Path) : String
       name = path.full
       return name if name.includes?("::")
@@ -291,6 +319,34 @@ module CRA::Psi
         @index.expand_macro_call_in_scope(node, current_scope, self)
       end
       true
+    end
+
+    def visit(node : Crystal::MacroIf) : Bool
+      return true if @owner_stack.empty?
+      expand_macro_if_text(node)
+      false
+    end
+
+    private def expand_macro_if_text(node : Crystal::MacroIf)
+      text = String.build { |io| collect_macro_literals(node.then, io) }
+      return if text.blank?
+      begin
+        parser = Crystal::Parser.new(text)
+        parsed = parser.parse
+        parsed.accept(self)
+      rescue
+      end
+    end
+
+    private def collect_macro_literals(node : Crystal::ASTNode, io : IO)
+      case node
+      when Crystal::Expressions
+        node.expressions.each { |e| collect_macro_literals(e, io) }
+      when Crystal::MacroLiteral
+        io << node.value
+      when Crystal::MacroIf
+        collect_macro_literals(node.then, io)
+      end
     end
 
     private def current_scope : String

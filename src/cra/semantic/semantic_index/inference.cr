@@ -86,7 +86,11 @@ module CRA::Psi
       narrowed = filter_methods_by_arity_strict(candidates, call)
       candidates = narrowed unless narrowed.empty?
 
-      method = candidates.find(&.return_type_ref) || candidates.first?
+      method = if call.block
+                 candidates.find { |m| m.return_type_ref.nil? } || candidates.first?
+               else
+                 candidates.find(&.return_type_ref) || candidates.first?
+               end
       return nil unless method
       result = infer_method_return_type(method, receiver_type, call, context, scope_def, scope_class, cursor, depth)
       if result.nil? && (block = call.block)
