@@ -105,6 +105,7 @@ module CRA
       getter max_arity : Int32?
       getter class_method : Bool
       getter owner : PsiElement | Nil
+      getter block_arg_types : Array(TypeRef)
       def initialize(
         @file : String?,
         @name : String,
@@ -115,6 +116,7 @@ module CRA
         @owner : PsiElement | Nil,
         @parameters : Array(String) = [] of String,
         @return_type_ref : TypeRef? = nil,
+        @block_arg_types : Array(TypeRef) = [] of TypeRef,
         @location : Location? = nil,
         @doc : String? = nil)
       end

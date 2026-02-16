@@ -238,6 +238,38 @@ describe CRA::Workspace do
     end
   end
 
+  it "shows inferred type for block parameter from method block signature" do
+    code = <<-CRYSTAL
+      class Fetcher
+        def self.fetch(& : (String, Int32) -> Nil)
+        end
+      end
+
+      def call
+        Fetcher.fetch do |name, count|
+          name
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_block_sig.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "name", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("name : String")
+    end
+  end
+
   it "shows inferred type for local assigned from .new" do
     code = <<-CRYSTAL
       class Greeter

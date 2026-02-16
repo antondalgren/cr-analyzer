@@ -250,6 +250,7 @@ module CRA::Psi
       if return_type = node.return_type
         return_type_ref = type_ref_from_type(return_type)
       end
+      block_arg_types = extract_block_arg_types(node)
       method_element = CRA::Psi::Method.new(
         file: @index.current_file,
         name: node.name,
@@ -260,6 +261,7 @@ module CRA::Psi
         return_type: node.return_type ? node.return_type.to_s : "Nil",
         return_type_ref: return_type_ref,
         parameters: node.args.map(&.name),
+        block_arg_types: block_arg_types,
         location: @index.location_for(node),
         doc: node.doc
       )
@@ -311,6 +313,22 @@ module CRA::Psi
       end
       max = splat_index ? nil : node.args.size
       {min: required, max: max}
+    end
+
+    private def extract_block_arg_types(node : Crystal::Def) : Array(CRA::Psi::TypeRef)
+      block_arg = node.block_arg
+      return [] of CRA::Psi::TypeRef unless block_arg
+      restriction = block_arg.restriction
+      return [] of CRA::Psi::TypeRef unless restriction.is_a?(Crystal::ProcNotation)
+      inputs = restriction.inputs
+      return [] of CRA::Psi::TypeRef unless inputs
+      types = [] of CRA::Psi::TypeRef
+      inputs.each do |input|
+        if type_ref = type_ref_from_type(input)
+          types << type_ref
+        end
+      end
+      types
     end
 
     # Collects call edges from a method body to resolved method definitions.

@@ -121,9 +121,27 @@ module CRA::Psi
         infer_cb = if deep
                      ->(node : Crystal::ASTNode) { infer_type_ref(node, context, scope_def, scope_class, cursor) }
                    end
-        scope_def.body.accept(TypeCollector.new(env, cursor, true, false, infer_cb))
+        block_hints_cb = if deep
+                           ->(call : Crystal::Call, receiver_type : TypeRef?) { block_param_types_for_call(call, receiver_type, context) }
+                         end
+        scope_def.body.accept(TypeCollector.new(env, cursor, true, false, infer_cb, block_hints_cb))
       end
       env
+    end
+
+    private def block_param_types_for_call(call : Crystal::Call, receiver_type : TypeRef?, context : String?) : Array(TypeRef)
+      return [] of TypeRef unless receiver_type
+      class_method = false
+      if obj = call.obj
+        class_method = obj.is_a?(Crystal::Path) || obj.is_a?(Crystal::Generic) || obj.is_a?(Crystal::Metaclass)
+      end
+      owner = resolve_type_ref(receiver_type, context)
+      return [] of TypeRef unless owner
+      candidates = find_methods_with_ancestors(owner, call.name, class_method)
+      return [] of TypeRef if candidates.empty?
+      narrowed = filter_methods_by_arity_strict(candidates, call)
+      method = (narrowed.empty? ? candidates : narrowed).first
+      method.block_arg_types
     end
 
     private def complete_members(

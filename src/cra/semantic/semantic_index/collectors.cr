@@ -9,7 +9,8 @@ module CRA::Psi
         @cursor : Crystal::Location?,
         @collect_locals : Bool,
         @fill_only : Bool = false,
-        @infer_callback : Proc(Crystal::ASTNode, TypeRef?)? = nil
+        @infer_callback : Proc(Crystal::ASTNode, TypeRef?)? = nil,
+        @block_hints_callback : Proc(Crystal::Call, TypeRef?, Array(TypeRef))? = nil
       )
       end
 
@@ -21,6 +22,9 @@ module CRA::Psi
         if block = node.block
           receiver_type = receiver_type_ref(node)
           hints = block_param_type_hints(node, receiver_type)
+          if hints.empty? && (cb = @block_hints_callback)
+            hints = cb.call(node, receiver_type)
+          end
           block.args.each_with_index do |arg, idx|
             type_ref = nil
             if arg.is_a?(Crystal::Arg)
