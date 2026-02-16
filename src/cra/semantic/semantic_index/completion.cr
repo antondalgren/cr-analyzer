@@ -109,6 +109,10 @@ module CRA::Psi
         scope_class.body.accept(InitializeCollector.new(TypeCollector.new(env, nil, false)))
         # Fill missing ivars/cvars from other method bodies (best-effort).
         scope_class.body.accept(DefIvarCollector.new(TypeCollector.new(env, nil, false, true)))
+        # Fill missing ivars from getter/property return types (macro-expanded).
+        if context && (owner = find_type(context))
+          fill_ivars_from_getters(env, owner)
+        end
       end
       if scope_def
         scope_def.args.each do |arg|
@@ -127,6 +131,54 @@ module CRA::Psi
         scope_def.body.accept(TypeCollector.new(env, cursor, true, false, infer_cb, block_hints_cb))
       end
       env
+    end
+
+    # Getter/property macros expand to methods with return types but don't
+    # produce explicit ivar type declarations.  Infer @name from the method's
+    # return type for any ivar not already typed in the env.  Walks ancestors
+    # so child structs/classes inherit getter types.
+    private def fill_ivars_from_getters(env : TypeEnv, owner : PsiElement)
+      fill_ivars_from_getters_walk(env, owner, {} of String => Bool)
+    end
+
+    private def fill_ivars_from_getters_walk(env : TypeEnv, owner : PsiElement, visited : Hash(String, Bool))
+      return unless owner.is_a?(CRA::Psi::Class) || owner.is_a?(CRA::Psi::Module)
+      return if visited[owner.name]?
+      visited[owner.name] = true
+
+      owner.methods.each do |method|
+        next if method.class_method
+        next unless method.min_arity == 0 && method.max_arity == 0
+        ivar_name = "@#{method.name}"
+        next if env.ivars[ivar_name]?
+        if ret = method.return_type_ref
+          env.ivars[ivar_name] = ret
+        end
+      end
+
+      case owner
+      when CRA::Psi::Class
+        if includes = @class_includes[owner.name]?
+          includes.each do |inc|
+            if resolved = resolve_type_node(inc, owner.name)
+              fill_ivars_from_getters_walk(env, resolved, visited)
+            end
+          end
+        end
+        if super_node = @class_superclass[owner.name]?
+          if resolved = resolve_type_node(super_node, owner.name)
+            fill_ivars_from_getters_walk(env, resolved, visited)
+          end
+        end
+      when CRA::Psi::Module
+        if includes = @module_includes[owner.name]?
+          includes.each do |inc|
+            if resolved = resolve_type_node(inc, owner.name)
+              fill_ivars_from_getters_walk(env, resolved, visited)
+            end
+          end
+        end
+      end
     end
 
     private def block_param_types_for_call(call : Crystal::Call, receiver_type : TypeRef?, context : String?) : Array(TypeRef)

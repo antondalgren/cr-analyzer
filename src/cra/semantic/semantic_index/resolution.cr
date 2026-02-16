@@ -102,6 +102,13 @@ module CRA::Psi
         end
       when Crystal::Arg
         type_refs = type_refs_for_node(node, context, scope_def, scope_class, cursor)
+        if type_refs.empty? && context
+          # For ivar-backed params (@name in initialize), infer from getter type.
+          type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
+          if ivar_ref = type_env.ivars["@#{node.name}"]?
+            type_refs = [ivar_ref]
+          end
+        end
         if type_refs.any?
           file = current_file || @current_file
           arg_type = type_refs.map(&.display).join(" | ")
@@ -130,9 +137,29 @@ module CRA::Psi
               location: location_for(def_node)
             )
           end
+        elsif context && (owner = find_type(context))
+          # Class-level var (e.g., inside getter/property/setter declaration).
+          # Look for a matching accessor method (including ancestors) to get the type.
+          methods = find_methods_with_ancestors(owner, node.name, false)
+          if method = methods.find(&.return_type_ref)
+            file = current_file || @current_file
+            results << CRA::Psi::LocalVar.new(
+              file: file,
+              name: node.name,
+              type: method.return_type_ref.not_nil!.display,
+              location: location_for(node)
+            )
+          end
         end
       when Crystal::InstanceVar
-        if def_node = instance_var_definition(scope_def, scope_class, node.name, cursor)
+        def_node = instance_var_definition(scope_def, scope_class, node.name, cursor)
+        # When no local definition is found (e.g., inherited ivar), still try
+        # the type env which walks ancestors via fill_ivars_from_getters.
+        unless def_node
+          type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
+          def_node = node if type_env.ivars[node.name]?
+        end
+        if def_node
           file = current_file || @current_file
           type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
           ivar_type = type_env.ivars[node.name]?.try(&.display) || "Unknown"

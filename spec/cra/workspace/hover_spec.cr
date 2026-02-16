@@ -1106,4 +1106,88 @@ describe CRA::Workspace do
       value.should contain("buffer : StaticArray(UInt8, 16)")
     end
   end
+
+  it "resolves ivar type from getter macro" do
+    code = <<-CRYSTAL
+      class Bytes
+      end
+
+      class Msg
+        getter ip : Bytes
+        getter family : Symbol
+
+        def initialize(@ip, @family)
+        end
+
+        def call
+          @ip
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_getter_ivar.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      # Hover on @ip inside method body
+      index = index_for(code, "@ip", 1)
+      pos = position_for(code, index)
+      hover = ws.hover(hover_request(uri, pos))
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("@ip : Bytes")
+
+      # Hover on getter name itself
+      index = index_for(code, "ip", 0)
+      pos = position_for(code, index)
+      hover = ws.hover(hover_request(uri, pos))
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("ip : Bytes")
+
+      # Hover on @ip in initialize param
+      index = index_for(code, "@ip", 0)
+      pos = position_for(code, index)
+      hover = ws.hover(hover_request(uri, pos))
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("Bytes")
+    end
+  end
+
+  it "resolves inherited ivar types from parent getter" do
+    code = <<-CRYSTAL
+      struct Base
+        getter version : Int32
+        getter ts : Int64
+
+        def initialize(@version, @ts)
+        end
+      end
+
+      struct Child < Base
+        def call
+          @version
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_child_struct.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "@version", 1)
+      pos = position_for(code, index)
+      hover = ws.hover(hover_request(uri, pos))
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("@version : Int32")
+    end
+  end
 end
