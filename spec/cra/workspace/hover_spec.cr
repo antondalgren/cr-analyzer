@@ -1009,4 +1009,75 @@ describe CRA::Workspace do
       hover.not_nil!.contents.as_h["value"].as_s.should contain("ts : Int64")
     end
   end
+
+  it "infers type from if-expression assignment" do
+    code = <<-CRYSTAL
+      class Bytes
+      end
+
+      def call(family : UInt8)
+        ip = if family == 4_u8
+               Bytes.new(4)
+             elsif family == 6_u8
+               Bytes.new(16)
+             else
+               raise "Unknown"
+             end
+        ip
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_if_expr.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "ip", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("ip : Bytes")
+    end
+  end
+
+  it "infers union type from if-expression with different branch types" do
+    code = <<-CRYSTAL
+      class Foo
+      end
+      class Bar
+      end
+
+      def call(x : Bool)
+        result = if x
+                   Foo.new
+                 else
+                   Bar.new
+                 end
+        result
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_if_union.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "result", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("Foo")
+      value.should contain("Bar")
+    end
+  end
 end

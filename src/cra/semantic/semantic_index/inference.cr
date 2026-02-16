@@ -51,6 +51,10 @@ module CRA::Psi
         type_ref_from_type(node)
       when Crystal::Call
         infer_type_ref_from_call(node, context, scope_def, scope_class, cursor, depth + 1)
+      when Crystal::If
+        infer_type_ref_from_if(node, context, scope_def, scope_class, cursor, depth + 1)
+      when Crystal::Case
+        infer_type_ref_from_case(node, context, scope_def, scope_class, cursor, depth + 1)
       else
         nil
       end
@@ -127,6 +131,99 @@ module CRA::Psi
         result = infer_block_body_type(block, context, scope_def, scope_class, cursor, depth)
       end
       result
+    end
+
+    private def infer_type_ref_from_if(
+      node : Crystal::If,
+      context : String?,
+      scope_def : Crystal::Def?,
+      scope_class : Crystal::ClassDef?,
+      cursor : Crystal::Location?,
+      depth : Int32
+    ) : TypeRef?
+      types = [] of TypeRef
+      seen = Set(String).new
+
+      # Collect the then branch type.
+      if then_type = infer_branch_type(node.then, context, scope_def, scope_class, cursor, depth)
+        types << then_type if seen.add?(then_type.display)
+      end
+
+      # Walk the elsif/else chain (Crystal models elsif as nested If in the else).
+      else_node = node.else
+      while else_node
+        case else_node
+        when Crystal::If
+          if then_type = infer_branch_type(else_node.then, context, scope_def, scope_class, cursor, depth)
+            types << then_type if seen.add?(then_type.display)
+          end
+          else_node = else_node.else
+        when Crystal::Nop
+          break
+        else
+          if else_type = infer_branch_type(else_node, context, scope_def, scope_class, cursor, depth)
+            types << else_type if seen.add?(else_type.display)
+          end
+          break
+        end
+      end
+
+      return nil if types.empty?
+      return types.first if types.size == 1
+      TypeRef.union(types)
+    end
+
+    private def infer_type_ref_from_case(
+      node : Crystal::Case,
+      context : String?,
+      scope_def : Crystal::Def?,
+      scope_class : Crystal::ClassDef?,
+      cursor : Crystal::Location?,
+      depth : Int32
+    ) : TypeRef?
+      types = [] of TypeRef
+      seen = Set(String).new
+
+      node.whens.each do |wh|
+        if wh_type = infer_branch_type(wh.body, context, scope_def, scope_class, cursor, depth)
+          types << wh_type if seen.add?(wh_type.display)
+        end
+      end
+
+      if else_body = node.else
+        if else_type = infer_branch_type(else_body, context, scope_def, scope_class, cursor, depth)
+          types << else_type if seen.add?(else_type.display)
+        end
+      end
+
+      return nil if types.empty?
+      return types.first if types.size == 1
+      TypeRef.union(types)
+    end
+
+    # Infers the type of the last expression in a branch body, skipping
+    # branches that always exit (raise, return, break, next).
+    private def infer_branch_type(
+      body : Crystal::ASTNode,
+      context : String?,
+      scope_def : Crystal::Def?,
+      scope_class : Crystal::ClassDef?,
+      cursor : Crystal::Location?,
+      depth : Int32
+    ) : TypeRef?
+      last = case body
+             when Crystal::Expressions then body.expressions.last?
+             when Crystal::Nop then return nil
+             else body
+             end
+      return nil unless last
+      return nil if branch_exits?(last)
+      infer_type_ref(last, context, scope_def, scope_class, cursor, depth)
+    end
+
+    private def branch_exits?(node : Crystal::ASTNode) : Bool
+      node.is_a?(Crystal::Return) || node.is_a?(Crystal::Break) || node.is_a?(Crystal::Next) ||
+        (node.is_a?(Crystal::Call) && node.name == "raise")
     end
 
     # When a method has no return type and is called with a block,
