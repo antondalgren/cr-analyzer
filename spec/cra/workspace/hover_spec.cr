@@ -633,4 +633,35 @@ describe CRA::Workspace do
     end
   end
 
+  it "shows inferred type for block parameter from chained method call" do
+    code = <<-CRYSTAL
+      class MessageBuilder
+        def self.generate(host : String) : Array(String)
+        end
+      end
+
+      def call
+        MessageBuilder.generate("localhost").map do |message|
+          message
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_chained_block.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "message", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("message : String")
+    end
+  end
 end

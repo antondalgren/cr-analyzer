@@ -328,6 +328,8 @@ module CRA::Psi
           @env.cvars[obj.name]?
         when Crystal::Path, Crystal::Generic, Crystal::Metaclass, Crystal::Union, Crystal::Self
           type_ref_from_type(obj)
+        when Crystal::Call
+          @infer_callback.try(&.call(obj))
         else
           type_ref_from_value(obj)
         end
