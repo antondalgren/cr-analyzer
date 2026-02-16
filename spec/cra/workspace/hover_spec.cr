@@ -940,4 +940,30 @@ describe CRA::Workspace do
       value.should contain("Bool")
     end
   end
+
+  it "infers receiver type for unresolved class method calls" do
+    code = <<-CRYSTAL
+      def call(io, format)
+        ts = Int64.from_io(io, format)
+        ts
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_class_fallback.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "ts", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("ts : Int64")
+    end
+  end
 end

@@ -95,13 +95,21 @@ module CRA::Psi
         return pointee
       end
       owner = resolve_type_ref(receiver_type, context)
-      return nil unless owner
+      unless owner
+        # For unresolved class method calls (e.g., Int64.from_io), assume the
+        # return type is the receiver type since most class methods are factories.
+        return receiver_type if class_method
+        return nil
+      end
 
       candidates = find_methods_with_ancestors(owner, call.name, class_method)
       if candidates.empty?
         if class_method && call.name == "[]"
           return infer_class_bracket_type(receiver_type, call)
         end
+        # For class methods not in the index (e.g., stdlib), fall back to the
+        # receiver type.
+        return receiver_type if class_method
         return nil
       end
 
