@@ -117,15 +117,22 @@ module CRA::Psi
         apply_is_a_narrowing(node.cond)
         node.then.accept(self)
         if cursor_in?(node.then)
-          # Cursor is inside the then-branch; keep narrowed type
           restore_locals_with_union(node)
           return false
         end
         unapply_narrowing
-        if else_node = node.else
-          else_node.accept(self)
+        if always_exits?(node.then)
+          apply_inverse_is_a_narrowing(node.cond)
+          if else_node = node.else
+            else_node.accept(self)
+          end
+          @saved_locals_stack.pop?
+        else
+          if else_node = node.else
+            else_node.accept(self)
+          end
+          restore_locals_with_union(node)
         end
-        restore_locals_with_union(node)
         false
       end
 
@@ -302,6 +309,39 @@ module CRA::Psi
           env[name] = prev
         end
         @narrowings.clear
+      end
+
+      private def always_exits?(node : Crystal::ASTNode) : Bool
+        last = case node
+               when Crystal::Expressions then node.expressions.last?
+               else                           node
+               end
+        return false unless last
+        last.is_a?(Crystal::Return) || last.is_a?(Crystal::Break) || last.is_a?(Crystal::Next)
+      end
+
+      private def apply_inverse_is_a_narrowing(cond : Crystal::ASTNode)
+        case cond
+        when Crystal::IsA
+          var_name = case obj = cond.obj
+                     when Crystal::Var        then obj.name
+                     when Crystal::InstanceVar then obj.name
+                     else                          return
+                     end
+          is_ivar = cond.obj.is_a?(Crystal::InstanceVar)
+          env = is_ivar ? @env.ivars : @env.locals
+          existing = env[var_name]?
+          return unless existing && existing.union?
+          checked = type_ref_from_type(cond.const)
+          return unless checked
+          checked_display = checked.display
+          remaining = existing.union_types.reject { |t| t.display == checked_display }
+          return if remaining.empty?
+          env[var_name] = remaining.size == 1 ? remaining.first : TypeRef.union(remaining)
+        when Crystal::And
+          apply_inverse_is_a_narrowing(cond.left)
+          apply_inverse_is_a_narrowing(cond.right)
+        end
       end
 
       private def extract_when_type(wh : Crystal::When) : TypeRef?

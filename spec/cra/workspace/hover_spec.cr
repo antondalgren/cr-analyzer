@@ -703,4 +703,34 @@ describe CRA::Workspace do
       value.should contain("packages : Array(Int32)")
     end
   end
+
+  it "narrows type after early return with is_a? check" do
+    code = <<-CRYSTAL
+      class Slice(T)
+      end
+
+      def call(ip : Slice(UInt16) | Slice(UInt8))
+        return ip if ip.is_a?(Slice(UInt8))
+        ip
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_early_return.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "ip", 3)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("ip : Slice(UInt16)")
+      value.should_not contain("UInt8")
+    end
+  end
 end
