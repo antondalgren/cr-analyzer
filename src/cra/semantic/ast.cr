@@ -108,6 +108,7 @@ module CRA
       getter class_method : Bool
       getter owner : PsiElement | Nil
       getter block_arg_types : Array(TypeRef)
+      getter block_return_type_ref : TypeRef?
       def initialize(
         @file : String?,
         @name : String,
@@ -121,6 +122,7 @@ module CRA
         @param_type_refs : Array(TypeRef?) = [] of TypeRef?,
         @free_vars : Array(String) = [] of String,
         @block_arg_types : Array(TypeRef) = [] of TypeRef,
+        @block_return_type_ref : TypeRef? = nil,
         @location : Location? = nil,
         @doc : String? = nil)
       end

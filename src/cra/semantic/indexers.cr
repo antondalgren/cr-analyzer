@@ -279,6 +279,7 @@ module CRA::Psi
         return_type_ref = type_ref_from_type(return_type)
       end
       block_arg_types = extract_block_arg_types(node)
+      block_return_type_ref = extract_block_return_type(node)
       param_type_refs = node.args.map { |arg|
         restriction = arg.restriction
         restriction ? type_ref_from_type(restriction) : nil
@@ -297,6 +298,7 @@ module CRA::Psi
         param_type_refs: param_type_refs,
         free_vars: free_vars,
         block_arg_types: block_arg_types,
+        block_return_type_ref: block_return_type_ref,
         location: @index.location_for(node),
         doc: node.doc
       )
@@ -392,6 +394,16 @@ module CRA::Psi
         end
       end
       types
+    end
+
+    private def extract_block_return_type(node : Crystal::Def) : CRA::Psi::TypeRef?
+      block_arg = node.block_arg
+      return nil unless block_arg
+      restriction = block_arg.restriction
+      return nil unless restriction.is_a?(Crystal::ProcNotation)
+      output = restriction.output
+      return nil unless output
+      type_ref_from_type(output)
     end
 
     # Collects call edges from a method body to resolved method definitions.

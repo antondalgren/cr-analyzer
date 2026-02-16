@@ -179,6 +179,15 @@ module CRA::Psi
           substitutions[name] = arg_type
         end
       end
+
+      if (block = call.block) && (block_ret_ref = method.block_return_type_ref)
+        block_ret_name = block_ret_ref.name
+        if block_ret_name && !substitutions[block_ret_name]? && type_var_names.includes?(block_ret_name)
+          if body_type = infer_block_body_type(block, context, scope_def, scope_class, cursor, depth)
+            substitutions[block_ret_name] = body_type
+          end
+        end
+      end
     end
 
     private def collect_type_var_candidates(

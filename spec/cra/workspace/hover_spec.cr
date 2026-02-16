@@ -664,4 +664,43 @@ describe CRA::Workspace do
       value.should contain("message : String")
     end
   end
+
+  it "infers return type of map from block body" do
+    code = <<-CRYSTAL
+      class Array(T)
+        def map(& : T -> U) : Array(U) forall U
+        end
+      end
+
+      class Builder
+        def self.generate(host : String) : Array(String)
+        end
+
+        def self.package(msg : String) : Int32
+        end
+      end
+
+      def call
+        packages = Builder.generate("localhost").map { |msg| Builder.package(msg) }
+        packages
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_map_return.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "packages", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("packages : Array(Int32)")
+    end
+  end
 end
