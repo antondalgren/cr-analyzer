@@ -362,4 +362,62 @@ describe CRA::Workspace do
       value.should contain("count : Int32")
     end
   end
+
+  it "deduplicates union type when generic resolves to same type" do
+    code = <<-CRYSTAL
+      class Config
+        def self.fetch(key : String, default : T) : String | T forall T
+        end
+      end
+
+      def call
+        env = Config.fetch("MY_ENV", "")
+        env
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_union_dedup.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "env", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("env : String")
+      value.should_not contain("String | String")
+    end
+  end
+
+  it "infers Array(UInt8) from array literal with typed elements" do
+    code = <<-CRYSTAL
+      def call
+        bytes = [0u8, 1u8, 2u8]
+        bytes
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_array_literal.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "bytes", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("bytes : Array(UInt8)")
+    end
+  end
 end

@@ -73,11 +73,21 @@ module CRA::Psi
           if inner = type_ref_from_type(of_type)
             TypeRef.named("Array", [inner])
           end
+        elsif first_elem = node.elements.first?
+          if inner = type_ref_from_value(first_elem)
+            TypeRef.named("Array", [inner])
+          end
         end
       when Crystal::HashLiteral
         if of_entry = node.of
           key = type_ref_from_type(of_entry.key)
           value = type_ref_from_type(of_entry.value)
+          if key && value
+            TypeRef.named("Hash", [key, value])
+          end
+        elsif first_entry = node.entries.first?
+          key = type_ref_from_value(first_entry.key)
+          value = type_ref_from_value(first_entry.value)
           if key && value
             TypeRef.named("Hash", [key, value])
           end

@@ -206,7 +206,9 @@ module CRA::Psi
     ) : TypeRef
       if type_ref.union?
         types = type_ref.union_types.map { |member| substitute_type_ref(member, substitutions, receiver_type) }
-        return TypeRef.union(types)
+        seen = Set(String).new
+        types = types.select { |t| seen.add?(t.display) }
+        return types.size == 1 ? types.first : TypeRef.union(types)
       end
 
       name = type_ref.name
