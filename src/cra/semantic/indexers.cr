@@ -87,6 +87,46 @@ module CRA::Psi
       false
     end
 
+    def visit(node : Crystal::LibDef) : Bool
+      name = node.name.full
+      owner = @owner_stack.last?.as?(CRA::Psi::Module)
+      if !owner && name.includes?("::")
+        if parent_name = parent_name_of(name)
+          owner = @index.find_module(parent_name, true)
+        end
+      elsif owner
+        name = "#{owner.name}::#{name}"
+      end
+      module_element = @index.ensure_module(
+        name,
+        owner,
+        @index.location_for(node),
+        [] of String,
+        node.doc
+      )
+      @owner_stack << module_element
+      node.accept_children(self)
+      @owner_stack.pop
+      false
+    end
+
+    def visit(node : Crystal::CStructOrUnionDef) : Bool
+      owner = @owner_stack.last?
+      name = owner ? "#{owner.name}::#{node.name}" : node.name
+      parent = owner.as?(CRA::Psi::Module | CRA::Psi::Class)
+      class_element = @index.ensure_class(
+        name,
+        parent,
+        @index.location_for(node),
+        [] of String,
+        node.doc
+      )
+      @owner_stack << class_element
+      node.accept_children(self)
+      @owner_stack.pop
+      false
+    end
+
     def visit(node : Crystal::Def) : Bool
       false
     end
@@ -250,6 +290,99 @@ module CRA::Psi
       @owner_stack << enum_element
       node.accept_children(self)
       @owner_stack.pop
+      false
+    end
+
+    def visit(node : Crystal::LibDef) : Bool
+      name = node.name.full
+      owner = @owner_stack.last?.as?(CRA::Psi::Module)
+      if !owner && name.includes?("::")
+        if parent_name = parent_name_of(name)
+          owner = @index.find_module(parent_name, true)
+        end
+      elsif owner
+        name = "#{owner.name}::#{name}"
+      end
+      module_element = @index.ensure_module(
+        name,
+        owner,
+        @index.location_for(node),
+        [] of String,
+        node.doc
+      )
+      @owner_stack << module_element
+      node.accept_children(self)
+      @owner_stack.pop
+      false
+    end
+
+    def visit(node : Crystal::CStructOrUnionDef) : Bool
+      owner = @owner_stack.last?
+      name = owner ? "#{owner.name}::#{node.name}" : node.name
+      parent = owner.as?(CRA::Psi::Module | CRA::Psi::Class)
+      class_element = @index.ensure_class(
+        name,
+        parent,
+        @index.location_for(node),
+        [] of String,
+        node.doc
+      )
+      fields = case body = node.body
+               when Crystal::Expressions then body.expressions
+               when Crystal::TypeDeclaration then [body.as(Crystal::ASTNode)]
+               else [] of Crystal::ASTNode
+               end
+      fields.each do |expr|
+        next unless expr.is_a?(Crystal::TypeDeclaration)
+        field_var = expr.var
+        next unless field_var.is_a?(Crystal::Var)
+        field_type_ref = type_ref_from_type(expr.declared_type)
+        next unless field_type_ref
+        method_element = CRA::Psi::Method.new(
+          file: @index.current_file,
+          name: field_var.name,
+          min_arity: 0,
+          max_arity: 0,
+          class_method: false,
+          owner: class_element,
+          return_type: expr.declared_type.to_s,
+          return_type_ref: field_type_ref,
+          parameters: [] of String,
+          location: @index.location_for(expr),
+          doc: expr.doc
+        )
+        @index.attach method_element, class_element
+        @index.register_method(method_element)
+      end
+      false
+    end
+
+    def visit(node : Crystal::FunDef) : Bool
+      owner = @owner_stack.last?
+      return false unless owner
+      return false unless owner.is_a?(CRA::Psi::Module) || owner.is_a?(CRA::Psi::Class)
+
+      return_type_ref = node.return_type ? type_ref_from_type(node.return_type.not_nil!) : nil
+      param_type_refs = node.args.map { |arg|
+        restriction = arg.restriction
+        restriction ? type_ref_from_type(restriction) : nil
+      }
+      method_element = CRA::Psi::Method.new(
+        file: @index.current_file,
+        name: node.name,
+        min_arity: node.args.size,
+        max_arity: node.args.size,
+        class_method: true,
+        owner: owner,
+        return_type: node.return_type ? node.return_type.to_s : "Nil",
+        return_type_ref: return_type_ref,
+        parameters: node.args.map(&.name),
+        param_type_refs: param_type_refs,
+        location: @index.location_for(node),
+        doc: node.doc
+      )
+      @index.attach method_element, owner
+      @index.register_method(method_element)
       false
     end
 

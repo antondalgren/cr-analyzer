@@ -733,4 +733,123 @@ describe CRA::Workspace do
       value.should_not contain("UInt8")
     end
   end
+
+  it "infers Pointer type from .null constructor" do
+    code = <<-CRYSTAL
+      lib LibC
+        struct IfAddrs
+          ifa_name : UInt8*
+        end
+      end
+
+      def call
+        ifap = Pointer(LibC::IfAddrs).null
+        ifap
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_pointer_null.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "ifap", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("ifap : Pointer(LibC::IfAddrs)")
+    end
+  end
+
+  it "resolves Pointer#current to the pointee type" do
+    code = <<-CRYSTAL
+      lib LibC
+        struct IfAddrs
+          ifa_name : UInt8*
+        end
+      end
+
+      def call
+        ptr = Pointer(LibC::IfAddrs).null
+        ifa = ptr.current
+        ifa
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_pointer_current.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "ifa", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("ifa : LibC::IfAddrs")
+    end
+  end
+
+  it "resolves C struct field types through chained access" do
+    code = <<-CRYSTAL
+      lib LibC
+        type SaFamilyT = UInt8
+
+        struct Sockaddr
+          sa_family : SaFamilyT
+        end
+
+        struct IfAddrs
+          ifa_addr : Sockaddr*
+        end
+      end
+
+      def call
+        ptr = Pointer(LibC::IfAddrs).null
+        ifa = ptr.value
+        addr = ifa.ifa_addr
+        sock = addr.value
+        family = sock.sa_family
+        family
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_struct_chain.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+      uri = "file://#{path}"
+
+      # addr should be Pointer(LibC::Sockaddr) — occ=3 skips "addr" inside Sockaddr/ifa_addr
+      index = index_for(code, "addr", 3)
+      pos = position_for(code, index)
+      hover = ws.hover(hover_request(uri, pos))
+      hover.should_not be_nil
+      hover.not_nil!.contents.as_h["value"].as_s.should contain("addr : Pointer(LibC::Sockaddr)")
+
+      # .value on Pointer(Sockaddr) should give Sockaddr
+      index = index_for(code, "sock", 1)
+      pos = position_for(code, index)
+      hover = ws.hover(hover_request(uri, pos))
+      hover.should_not be_nil
+      hover.not_nil!.contents.as_h["value"].as_s.should contain("sock : LibC::Sockaddr")
+
+      # .sa_family should resolve to SaFamilyT
+      index = index_for(code, "family", 1)
+      pos = position_for(code, index)
+      hover = ws.hover(hover_request(uri, pos))
+      hover.should_not be_nil
+      hover.not_nil!.contents.as_h["value"].as_s.should contain("family : SaFamilyT")
+    end
+  end
 end

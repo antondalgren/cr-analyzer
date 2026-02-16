@@ -8,7 +8,7 @@ module CRA::Psi
       cursor : Crystal::Location?,
       depth : Int32 = 0
     ) : TypeRef?
-      return nil if depth > 4
+      return nil if depth > 12
 
       if type_ref = type_ref_from_value(node)
         return type_ref
@@ -17,14 +17,27 @@ module CRA::Psi
       type_env : TypeEnv? = nil
       case node
       when Crystal::Var
-        type_env ||= build_type_env(scope_def, scope_class, cursor)
-        if ref = type_env.locals[node.name]?
-          ref
-        elsif scope_def
+        if scope_def
+          # Fast path: check def args directly.
+          scope_def.args.each do |arg|
+            if arg.name == node.name
+              if restriction = arg.restriction
+                return type_ref_from_type(restriction)
+              end
+              return nil
+            end
+          end
+          # Non-deep env handles ordered assignments and self-referential cases.
+          type_env ||= build_type_env(scope_def, scope_class, cursor)
+          if ref = type_env.locals[node.name]?
+            return ref
+          end
+          # Fall back to assignment value inference for chains (e.g., ptr.value).
           if assign_val = find_local_assignment_value(scope_def, node.name, cursor)
-            infer_type_ref(assign_val, context, scope_def, scope_class, cursor, depth + 1)
+            return infer_type_ref(assign_val, context, scope_def, scope_class, cursor, depth + 1)
           end
         end
+        nil
       when Crystal::InstanceVar
         type_env ||= build_type_env(scope_def, scope_class, cursor)
         type_env.ivars[node.name]?
@@ -48,7 +61,7 @@ module CRA::Psi
       cursor : Crystal::Location?,
       depth : Int32
     ) : TypeRef?
-      if call.name == "new"
+      if call.name == "new" || call.name == "null" || call.name == "malloc"
         if obj = call.obj
           return type_ref_from_type(obj)
         end
@@ -71,6 +84,9 @@ module CRA::Psi
         if indexed = infer_index_return_type(receiver_type, call)
           return indexed
         end
+      end
+      if pointee = infer_pointer_deref_type(receiver_type, call.name)
+        return pointee
       end
       owner = resolve_type_ref(receiver_type, context)
       return nil unless owner
@@ -146,7 +162,9 @@ module CRA::Psi
       if call
         infer_free_var_substitutions(method, call, substitutions, context, scope_def, scope_class, cursor, depth)
       end
-      substitute_type_ref(return_ref, substitutions, receiver_type)
+      result = substitute_type_ref(return_ref, substitutions, receiver_type)
+      owner_context = method.owner.try(&.name)
+      qualify_type_ref(result, owner_context)
     end
 
     private def infer_free_var_substitutions(
@@ -254,6 +272,28 @@ module CRA::Psi
       TypeRef.named(name, args)
     end
 
+    private def qualify_type_ref(type_ref : TypeRef, context : String?) : TypeRef
+      return type_ref unless context
+      if type_ref.union?
+        types = type_ref.union_types.map { |m| qualify_type_ref(m, context) }
+        return TypeRef.union(types)
+      end
+      name = type_ref.name
+      return type_ref unless name
+      args = type_ref.args.empty? ? type_ref.args : type_ref.args.map { |a| qualify_type_ref(a, context) }
+      return TypeRef.named(name, args) if name.includes?("::")
+      return TypeRef.named(name, args) if find_type(name)
+      parts = context.split("::")
+      while parts.size > 0
+        qualified = (parts + [name]).join("::")
+        if find_type(qualified)
+          return TypeRef.named(qualified, args)
+        end
+        parts.pop
+      end
+      TypeRef.named(name, args)
+    end
+
     private def nil_type?(type_ref : TypeRef) : Bool
       return false if type_ref.union?
       name = type_ref.name
@@ -286,6 +326,15 @@ module CRA::Psi
       else
         nil
       end
+    end
+
+    private def infer_pointer_deref_type(receiver_type : TypeRef, method_name : String) : TypeRef?
+      return nil unless {"current", "value", "[]"}.includes?(method_name)
+      name = receiver_type.name
+      return nil unless name
+      base_name = name.starts_with?("::") ? name[2..] : name
+      return nil unless base_name == "Pointer"
+      receiver_type.args.first?
     end
 
     private def range_index?(call : Crystal::Call) : Bool

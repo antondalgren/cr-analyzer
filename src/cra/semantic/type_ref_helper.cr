@@ -63,7 +63,7 @@ module CRA::Psi
       when Crystal::NilableCast
         type_ref_from_type(node.to)
       when Crystal::Call
-        if node.name == "new"
+        if node.name == "new" || node.name == "null" || node.name == "malloc"
           if obj = node.obj
             type_ref_from_type(obj)
           end
