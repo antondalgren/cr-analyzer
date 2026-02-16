@@ -89,18 +89,18 @@ module CRA::Psi
 
     private def number_literal_type(node : Crystal::NumberLiteral) : String
       case node.kind
-      when :i8  then "Int8"
-      when :i16 then "Int16"
-      when :i32 then "Int32"
-      when :i64 then "Int64"
-      when :i128 then "Int128"
-      when :u8  then "UInt8"
-      when :u16 then "UInt16"
-      when :u32 then "UInt32"
-      when :u64 then "UInt64"
-      when :u128 then "UInt128"
-      when :f32 then "Float32"
-      when :f64 then "Float64"
+      when .i8?   then "Int8"
+      when .i16?  then "Int16"
+      when .i32?  then "Int32"
+      when .i64?  then "Int64"
+      when .i128? then "Int128"
+      when .u8?   then "UInt8"
+      when .u16?  then "UInt16"
+      when .u32?  then "UInt32"
+      when .u64?  then "UInt64"
+      when .u128? then "UInt128"
+      when .f32?  then "Float32"
+      when .f64?  then "Float64"
       else
         node.value.includes?('.') ? "Float64" : "Int32"
       end

@@ -76,7 +76,12 @@ module CRA::Psi
       return nil unless owner
 
       candidates = find_methods_with_ancestors(owner, call.name, class_method)
-      return nil if candidates.empty?
+      if candidates.empty?
+        if class_method && call.name == "[]"
+          return infer_class_bracket_type(receiver_type, call)
+        end
+        return nil
+      end
 
       narrowed = filter_methods_by_arity_strict(candidates, call)
       candidates = narrowed unless narrowed.empty?
@@ -84,6 +89,21 @@ module CRA::Psi
       method = candidates.find(&.return_type_ref) || candidates.first?
       return nil unless method
       infer_method_return_type(method, receiver_type)
+    end
+
+    # Infers the return type of a class-level [] call (e.g., Slice[1u8, 2u8]).
+    # These are typically macros that construct an instance of the receiver type.
+    private def infer_class_bracket_type(receiver_type : TypeRef, call : Crystal::Call) : TypeRef?
+      name = receiver_type.name
+      return receiver_type unless name
+
+      if first_arg = call.args.first?
+        if elem_ref = type_ref_from_value(first_arg)
+          return TypeRef.named(name, [elem_ref])
+        end
+      end
+
+      receiver_type
     end
 
     private def infer_method_return_type(method : CRA::Psi::Method, receiver_type : TypeRef) : TypeRef?
