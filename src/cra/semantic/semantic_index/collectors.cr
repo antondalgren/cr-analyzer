@@ -13,7 +13,7 @@ module CRA::Psi
         @block_hints_callback : Proc(Crystal::Call, TypeRef?, Array(TypeRef))? = nil
       )
         @saved_locals_stack = [] of Hash(String, TypeRef)
-        @narrowings = [] of {String, Bool, TypeRef}
+        @narrowings = [] of {String, Bool, TypeRef?}
       end
 
       def visit(node : Crystal::ASTNode) : Bool
@@ -283,7 +283,7 @@ module CRA::Psi
           is_ivar = cond.obj.is_a?(Crystal::InstanceVar)
           env = is_ivar ? @env.ivars : @env.locals
           prev = env[var_name]?
-          @narrowings << {var_name, is_ivar, prev || narrowed_type}
+          @narrowings << {var_name, is_ivar, prev}
           env[var_name] = narrowed_type
         when Crystal::Var
           narrow_nil(cond.name, false)
@@ -306,7 +306,11 @@ module CRA::Psi
       private def unapply_narrowing
         @narrowings.reverse_each do |name, is_ivar, prev|
           env = is_ivar ? @env.ivars : @env.locals
-          env[name] = prev
+          if prev
+            env[name] = prev
+          else
+            env.delete(name)
+          end
         end
         @narrowings.clear
       end
