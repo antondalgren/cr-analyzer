@@ -101,6 +101,8 @@ module CRA
       getter return_type : String
       getter return_type_ref : TypeRef?
       getter parameters : Array(String)
+      getter param_type_refs : Array(TypeRef?)
+      getter free_vars : Array(String)
       getter min_arity : Int32
       getter max_arity : Int32?
       getter class_method : Bool
@@ -116,6 +118,8 @@ module CRA
         @owner : PsiElement | Nil,
         @parameters : Array(String) = [] of String,
         @return_type_ref : TypeRef? = nil,
+        @param_type_refs : Array(TypeRef?) = [] of TypeRef?,
+        @free_vars : Array(String) = [] of String,
         @block_arg_types : Array(TypeRef) = [] of TypeRef,
         @location : Location? = nil,
         @doc : String? = nil)

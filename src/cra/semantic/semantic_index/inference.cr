@@ -88,7 +88,7 @@ module CRA::Psi
 
       method = candidates.find(&.return_type_ref) || candidates.first?
       return nil unless method
-      infer_method_return_type(method, receiver_type)
+      infer_method_return_type(method, receiver_type, call, context, scope_def, scope_class, cursor, depth)
     end
 
     # Infers the return type of a class-level [] call (e.g., Slice[1u8, 2u8]).
@@ -106,10 +106,81 @@ module CRA::Psi
       receiver_type
     end
 
-    private def infer_method_return_type(method : CRA::Psi::Method, receiver_type : TypeRef) : TypeRef?
+    private def infer_method_return_type(
+      method : CRA::Psi::Method,
+      receiver_type : TypeRef,
+      call : Crystal::Call? = nil,
+      context : String? = nil,
+      scope_def : Crystal::Def? = nil,
+      scope_class : Crystal::ClassDef? = nil,
+      cursor : Crystal::Location? = nil,
+      depth : Int32 = 0
+    ) : TypeRef?
       return nil unless return_ref = method.return_type_ref
       substitutions = type_vars_for_owner(method.owner, receiver_type)
+      if call
+        infer_free_var_substitutions(method, call, substitutions, context, scope_def, scope_class, cursor, depth)
+      end
       substitute_type_ref(return_ref, substitutions, receiver_type)
+    end
+
+    private def infer_free_var_substitutions(
+      method : CRA::Psi::Method,
+      call : Crystal::Call,
+      substitutions : Hash(String, TypeRef),
+      context : String?,
+      scope_def : Crystal::Def?,
+      scope_class : Crystal::ClassDef?,
+      cursor : Crystal::Location?,
+      depth : Int32
+    )
+      type_var_names = method.free_vars.to_set
+      if type_var_names.empty? && (return_ref = method.return_type_ref)
+        collect_type_var_candidates(return_ref, method.param_type_refs, type_var_names, context)
+      end
+      return if type_var_names.empty?
+
+      method.param_type_refs.each_with_index do |param_ref, idx|
+        next unless param_ref
+        name = param_ref.name
+        next unless name
+        next if substitutions[name]?
+        next unless type_var_names.includes?(name)
+
+        arg = call.args[idx]?
+        next unless arg
+
+        if arg_type = infer_type_ref(arg, context, scope_def, scope_class, cursor, depth + 1)
+          substitutions[name] = arg_type
+        end
+      end
+    end
+
+    private def collect_type_var_candidates(
+      return_ref : TypeRef,
+      param_type_refs : Array(TypeRef?),
+      candidates : Set(String),
+      context : String?
+    )
+      names = [] of String
+      collect_type_ref_names(return_ref, names)
+      names.each do |name|
+        next if resolve_type_name(name, context)
+        if param_type_refs.any? { |pr| pr && pr.name == name }
+          candidates << name
+        end
+      end
+    end
+
+    private def collect_type_ref_names(type_ref : TypeRef, names : Array(String))
+      if type_ref.union?
+        type_ref.union_types.each { |member| collect_type_ref_names(member, names) }
+        return
+      end
+      if name = type_ref.name
+        names << name
+      end
+      type_ref.args.each { |arg| collect_type_ref_names(arg, names) }
     end
 
     private def type_vars_for_owner(owner : PsiElement | Nil, receiver_type : TypeRef) : Hash(String, TypeRef)

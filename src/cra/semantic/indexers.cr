@@ -251,6 +251,11 @@ module CRA::Psi
         return_type_ref = type_ref_from_type(return_type)
       end
       block_arg_types = extract_block_arg_types(node)
+      param_type_refs = node.args.map { |arg|
+        restriction = arg.restriction
+        restriction ? type_ref_from_type(restriction) : nil
+      }
+      free_vars = node.free_vars || [] of String
       method_element = CRA::Psi::Method.new(
         file: @index.current_file,
         name: node.name,
@@ -261,6 +266,8 @@ module CRA::Psi
         return_type: node.return_type ? node.return_type.to_s : "Nil",
         return_type_ref: return_type_ref,
         parameters: node.args.map(&.name),
+        param_type_refs: param_type_refs,
+        free_vars: free_vars,
         block_arg_types: block_arg_types,
         location: @index.location_for(node),
         doc: node.doc

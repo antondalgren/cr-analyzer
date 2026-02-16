@@ -300,4 +300,66 @@ describe CRA::Workspace do
       value.should contain("greeter : Greeter")
     end
   end
+
+  it "shows inferred type for local from generic method return type" do
+    code = <<-CRYSTAL
+      class Config
+        def self.fetch(key : String, default : T) : T forall T
+        end
+      end
+
+      def call
+        env = Config.fetch("MY_ENV", "")
+        env
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_generic.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "env", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("env : String")
+    end
+  end
+
+  it "shows inferred type for local from implicit generic return type" do
+    code = <<-CRYSTAL
+      class Store
+        def self.get(key : String, fallback : T) : T
+        end
+      end
+
+      def call
+        count = Store.get("key", 42)
+        count
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_implicit_generic.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "count", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("count : Int32")
+    end
+  end
 end
