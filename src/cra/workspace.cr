@@ -64,6 +64,7 @@ module CRA
       scan_path(lib_path, seen) if Dir.exists?(lib_path.to_s)
 
       scan_path(@path, seen)
+      @analyzer.register_primitive_superclasses
       @analyzer.dump_roots if ENV["CRA_DUMP_ROOTS"]? == "1"
     end
 

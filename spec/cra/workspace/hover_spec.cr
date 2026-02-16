@@ -966,4 +966,47 @@ describe CRA::Workspace do
       value.should contain("ts : Int64")
     end
   end
+
+  it "resolves inherited class method through superclass chain" do
+    code = <<-CRYSTAL
+      struct Number
+      end
+
+      struct Int < Number
+        def self.from_io(io, format) : self
+        end
+      end
+
+      struct Int64 < Int
+      end
+
+      def call(io, format)
+        ts = Int64.from_io(io, format)
+        ts
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_inherited.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "from_io", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("def Int.from_io")
+
+      index = index_for(code, "ts", 1)
+      pos = position_for(code, index)
+      hover = ws.hover(hover_request(uri, pos))
+      hover.should_not be_nil
+      hover.not_nil!.contents.as_h["value"].as_s.should contain("ts : Int64")
+    end
+  end
 end
