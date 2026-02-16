@@ -50,6 +50,15 @@ module CRA::Psi
         true
       end
 
+      def visit(node : Crystal::UninitializedVar) : Bool
+        return false unless before_cursor?(node)
+
+        if type_ref = type_ref_from_type(node.declared_type)
+          assign_type(node.var, type_ref)
+        end
+        true
+      end
+
       def visit(node : Crystal::Assign) : Bool
         return false unless before_cursor?(node)
 
@@ -534,6 +543,12 @@ module CRA::Psi
       end
 
       def visit(node : Crystal::TypeDeclaration) : Bool
+        return false unless before_cursor?(node)
+        record_target(node.var)
+        true
+      end
+
+      def visit(node : Crystal::UninitializedVar) : Bool
         return false unless before_cursor?(node)
         record_target(node.var)
         true

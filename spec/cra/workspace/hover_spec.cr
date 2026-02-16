@@ -1080,4 +1080,30 @@ describe CRA::Workspace do
       value.should contain("Bar")
     end
   end
+
+  it "infers type from uninitialized variable declaration" do
+    code = <<-CRYSTAL
+      def call
+        buffer = uninitialized UInt8[16]
+        buffer
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_uninit.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "buffer", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("buffer : StaticArray(UInt8, 16)")
+    end
+  end
 end
