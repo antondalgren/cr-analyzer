@@ -17,6 +17,9 @@ module CRA::Psi
       type_env : TypeEnv? = nil
       case node
       when Crystal::Var
+        if node.name == "self" && context
+          return TypeRef.named(context)
+        end
         if scope_def
           # Fast path: check def args directly.
           scope_def.args.each do |arg|
@@ -74,6 +77,9 @@ module CRA::Psi
         class_method = obj.is_a?(Crystal::Path) || obj.is_a?(Crystal::Generic) || obj.is_a?(Crystal::Metaclass)
         class_method = scope_def && scope_def.receiver ? true : false if obj.is_a?(Crystal::Self)
         receiver_type = infer_type_ref(obj, context, scope_def, scope_class, cursor, depth + 1)
+        if call.name == "class" && receiver_type
+          return receiver_type
+        end
       elsif context
         receiver_type = TypeRef.named(context)
         class_method = scope_def && scope_def.receiver ? true : false

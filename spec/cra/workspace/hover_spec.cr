@@ -909,4 +909,35 @@ describe CRA::Workspace do
       hover.not_nil!.contents.as_h["value"].as_s.should contain("family : SaFamilyT")
     end
   end
+
+  it "resolves self.class.method to class method" do
+    code = <<-CRYSTAL
+      class Sender
+        def self.send(msg : String) : Bool
+        end
+
+        def call
+          self.class.send("hello")
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_self_class.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "send", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("def Sender.send(msg)")
+      value.should contain("Bool")
+    end
+  end
 end

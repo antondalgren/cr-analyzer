@@ -440,7 +440,8 @@ module CRA::Psi
       when Crystal::Call
         if type_ref = infer_type_ref(receiver, context, scope_def, scope_class, cursor)
           if owner = resolve_type_ref(type_ref, context)
-            return {owner, false}
+            is_class_call = receiver.name == "class"
+            return {owner, is_class_call}
           end
         end
       when Crystal::Var

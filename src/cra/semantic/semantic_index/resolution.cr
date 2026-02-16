@@ -193,7 +193,8 @@ module CRA::Psi
           else
             if type_ref = infer_type_ref(obj, context, scope_def, scope_class, cursor)
               if owner = resolve_type_ref(type_ref, context)
-                candidates.concat(find_methods_with_ancestors(owner, node.name, false))
+                is_class_call = obj.is_a?(Crystal::Call) && obj.name == "class"
+                candidates.concat(find_methods_with_ancestors(owner, node.name, is_class_call))
               end
             end
           end
