@@ -459,6 +459,53 @@ module CRA::Psi
       end
     end
 
+    # Finds the RHS value of the last assignment to a given local variable before the cursor.
+    class AssignmentValueCollector < Crystal::Visitor
+      getter value : Crystal::ASTNode?
+
+      def initialize(@name : String, @cursor : Crystal::Location?)
+      end
+
+      def visit(node : Crystal::ASTNode) : Bool
+        true
+      end
+
+      def visit(node : Crystal::Assign) : Bool
+        return false unless before_cursor?(node)
+        if target = node.target.as?(Crystal::Var)
+          if target.name == @name
+            @value = node.value
+          end
+        end
+        true
+      end
+
+      def visit(node : Crystal::Def) : Bool
+        false
+      end
+
+      def visit(node : Crystal::ClassDef) : Bool
+        false
+      end
+
+      def visit(node : Crystal::ModuleDef) : Bool
+        false
+      end
+
+      def visit(node : Crystal::Macro) : Bool
+        false
+      end
+
+      private def before_cursor?(node : Crystal::ASTNode) : Bool
+        cursor = @cursor
+        return true unless cursor
+        loc = node.location
+        return true unless loc
+        loc.line_number < cursor.line_number ||
+          (loc.line_number == cursor.line_number && loc.column_number <= cursor.column_number)
+      end
+    end
+
     # Collects class variable names within a class scope.
     class ClassVarNameCollector < Crystal::Visitor
       getter names : Hash(String, Crystal::ASTNode)

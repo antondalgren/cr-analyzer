@@ -106,6 +106,11 @@ module CRA::Psi
             file = current_file || @current_file
             type_env ||= build_type_env(scope_def, scope_class, cursor)
             local_type = type_env.locals[node.name]?.try(&.display) || ""
+            if local_type.empty?
+              if type_ref = infer_type_ref(node, context, scope_def, scope_class, cursor)
+                local_type = type_ref.display
+              end
+            end
             results << CRA::Psi::LocalVar.new(
               file: file,
               name: node.name,

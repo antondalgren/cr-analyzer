@@ -18,7 +18,13 @@ module CRA::Psi
       case node
       when Crystal::Var
         type_env ||= build_type_env(scope_def, scope_class, cursor)
-        type_env.locals[node.name]?
+        if ref = type_env.locals[node.name]?
+          ref
+        elsif scope_def
+          if assign_val = find_local_assignment_value(scope_def, node.name, cursor)
+            infer_type_ref(assign_val, context, scope_def, scope_class, cursor, depth + 1)
+          end
+        end
       when Crystal::InstanceVar
         type_env ||= build_type_env(scope_def, scope_class, cursor)
         type_env.ivars[node.name]?
@@ -251,6 +257,12 @@ module CRA::Psi
           dump_element(meth, indent + 1)
         end
       end
+    end
+
+    private def find_local_assignment_value(scope_def : Crystal::Def, name : String, cursor : Crystal::Location?) : Crystal::ASTNode?
+      collector = AssignmentValueCollector.new(name, cursor)
+      scope_def.body.accept(collector)
+      collector.value
     end
 
     private def resolve_path(path : Crystal::Path, context : String?) : CRA::Psi::Module | CRA::Psi::Class | CRA::Psi::Enum | Nil

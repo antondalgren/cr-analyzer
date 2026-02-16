@@ -145,6 +145,37 @@ describe CRA::Workspace do
     end
   end
 
+  it "shows inferred type for local assigned from class method call" do
+    code = <<-CRYSTAL
+      class Resolver
+        def self.resolve(name) : String
+        end
+      end
+
+      def call
+        result = Resolver.resolve("foo")
+        result
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_class_method.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "result", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("result : String")
+    end
+  end
+
   it "shows inferred type for local assigned from .new" do
     code = <<-CRYSTAL
       class Greeter

@@ -418,7 +418,11 @@ module CRA::Psi
         end
       when Crystal::Var
         type_env ||= build_type_env(scope_def, scope_class, cursor)
-        if type_ref = type_env.locals[receiver.name]?
+        type_ref = type_env.locals[receiver.name]?
+        unless type_ref
+          type_ref = infer_type_ref(receiver, context, scope_def, scope_class, cursor)
+        end
+        if type_ref
           if owner = resolve_type_ref(type_ref, context)
             return {owner, false}
           end
