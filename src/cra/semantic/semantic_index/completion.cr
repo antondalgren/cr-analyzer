@@ -94,7 +94,13 @@ module CRA::Psi
     end
 
     # Builds a local type env from class-level declarations, initialize, and the current def.
-    private def build_type_env(scope_def : Crystal::Def?, scope_class : Crystal::ClassDef?, cursor : Crystal::Location?) : TypeEnv
+    private def build_type_env(
+      scope_def : Crystal::Def?,
+      scope_class : Crystal::ClassDef?,
+      cursor : Crystal::Location?,
+      context : String? = nil,
+      deep : Bool = false
+    ) : TypeEnv
       env = TypeEnv.new
       if scope_class
         # Collect ivar declarations and assignments at class level.
@@ -112,7 +118,10 @@ module CRA::Psi
             end
           end
         end
-        scope_def.body.accept(TypeCollector.new(env, cursor, true))
+        infer_cb = if deep
+                     ->(node : Crystal::ASTNode) { infer_type_ref(node, context, scope_def, scope_class, cursor) }
+                   end
+        scope_def.body.accept(TypeCollector.new(env, cursor, true, false, infer_cb))
       end
       env
     end
@@ -417,7 +426,7 @@ module CRA::Psi
           end
         end
       when Crystal::Var
-        type_env ||= build_type_env(scope_def, scope_class, cursor)
+        type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
         type_ref = type_env.locals[receiver.name]?
         unless type_ref
           type_ref = infer_type_ref(receiver, context, scope_def, scope_class, cursor)
@@ -428,7 +437,7 @@ module CRA::Psi
           end
         end
       when Crystal::InstanceVar
-        type_env ||= build_type_env(scope_def, scope_class, cursor)
+        type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
         if type_ref = type_env.ivars[receiver.name]?
           if owner = resolve_type_ref(type_ref, context)
             return {owner, false}
@@ -438,7 +447,7 @@ module CRA::Psi
           return {owner, false}
         end
       when Crystal::ClassVar
-        type_env ||= build_type_env(scope_def, scope_class, cursor)
+        type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
         if type_ref = type_env.cvars[receiver.name]?
           if owner = resolve_type_ref(type_ref, context)
             return {owner, true}

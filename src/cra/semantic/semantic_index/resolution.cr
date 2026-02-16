@@ -104,7 +104,7 @@ module CRA::Psi
         if scope_def
           if def_node = local_definition(scope_def, node.name, cursor)
             file = current_file || @current_file
-            type_env ||= build_type_env(scope_def, scope_class, cursor)
+            type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
             local_type = type_env.locals[node.name]?.try(&.display) || ""
             if local_type.empty?
               if type_ref = infer_type_ref(node, context, scope_def, scope_class, cursor)
@@ -122,7 +122,7 @@ module CRA::Psi
       when Crystal::InstanceVar
         if def_node = instance_var_definition(scope_def, scope_class, node.name, cursor)
           file = current_file || @current_file
-          type_env ||= build_type_env(scope_def, scope_class, cursor)
+          type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
           ivar_type = type_env.ivars[node.name]?.try(&.display) || "Unknown"
           if context && (owner = find_class(context))
             results << CRA::Psi::InstanceVar.new(
@@ -158,21 +158,21 @@ module CRA::Psi
               end
             end
           when Crystal::Var
-            type_env ||= build_type_env(scope_def, scope_class, cursor)
+            type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
             if type_ref = type_env.locals[obj.name]?
               if owner = resolve_type_ref(type_ref, context)
                 candidates.concat(find_methods_with_ancestors(owner, node.name, false))
               end
             end
           when Crystal::InstanceVar
-            type_env ||= build_type_env(scope_def, scope_class, cursor)
+            type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
             if type_ref = type_env.ivars[obj.name]?
               if owner = resolve_type_ref(type_ref, context)
                 candidates.concat(find_methods_with_ancestors(owner, node.name, false))
               end
             end
           when Crystal::ClassVar
-            type_env ||= build_type_env(scope_def, scope_class, cursor)
+            type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
             if type_ref = type_env.cvars[obj.name]?
               if owner = resolve_type_ref(type_ref, context)
                 candidates.concat(find_methods_with_ancestors(owner, node.name, false))

@@ -8,7 +8,8 @@ module CRA::Psi
         @env : TypeEnv,
         @cursor : Crystal::Location?,
         @collect_locals : Bool,
-        @fill_only : Bool = false
+        @fill_only : Bool = false,
+        @infer_callback : Proc(Crystal::ASTNode, TypeRef?)? = nil
       )
       end
 
@@ -59,6 +60,7 @@ module CRA::Psi
                      else
                        nil
                      end
+          type_ref ||= @infer_callback.try(&.call(node.value))
           assign_type(node.target, type_ref) if type_ref
         end
         true
@@ -80,6 +82,7 @@ module CRA::Psi
                      else
                        nil
                      end
+          type_ref ||= @infer_callback.try(&.call(node.value))
           assign_type(node.target, type_ref) if type_ref
         end
         true
@@ -130,7 +133,7 @@ module CRA::Psi
 
         case obj
         when Crystal::Var
-          @env.locals[obj.name]?
+          @env.locals[obj.name]? || @infer_callback.try(&.call(obj))
         when Crystal::InstanceVar
           @env.ivars[obj.name]?
         when Crystal::ClassVar

@@ -205,6 +205,39 @@ describe CRA::Workspace do
     end
   end
 
+  it "shows inferred type for block parameter from method-call-assigned receiver" do
+    code = <<-CRYSTAL
+      class Resolver
+        def self.resolve(names) : Array(String)
+        end
+      end
+
+      def call
+        results = Resolver.resolve(["a", "b"])
+        results.each do |item|
+          item
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_block_param.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "item", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("item : String")
+    end
+  end
+
   it "shows inferred type for local assigned from .new" do
     code = <<-CRYSTAL
       class Greeter
