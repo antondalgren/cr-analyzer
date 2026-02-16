@@ -12,6 +12,8 @@ module CRA::Psi
         @infer_callback : Proc(Crystal::ASTNode, TypeRef?)? = nil,
         @block_hints_callback : Proc(Crystal::Call, TypeRef?, Array(TypeRef))? = nil
       )
+        @saved_locals_stack = [] of Hash(String, TypeRef)
+        @narrowings = [] of {String, Bool, TypeRef}
       end
 
       def visit(node : Crystal::ASTNode) : Bool
@@ -108,6 +110,89 @@ module CRA::Psi
         false
       end
 
+      def visit(node : Crystal::If) : Bool
+        return false unless before_cursor?(node)
+        push_locals_snapshot
+        node.cond.accept(self)
+        apply_is_a_narrowing(node.cond)
+        node.then.accept(self)
+        if cursor_in?(node.then)
+          # Cursor is inside the then-branch; keep narrowed type
+          restore_locals_with_union(node)
+          return false
+        end
+        unapply_narrowing
+        if else_node = node.else
+          else_node.accept(self)
+        end
+        restore_locals_with_union(node)
+        false
+      end
+
+      def visit(node : Crystal::Unless) : Bool
+        return false unless before_cursor?(node)
+        push_locals_snapshot
+        true
+      end
+
+      def end_visit(node : Crystal::Unless)
+        restore_locals_with_union(node)
+      end
+
+      def visit(node : Crystal::Case) : Bool
+        return false unless before_cursor?(node)
+        push_locals_snapshot
+        case_var = case cond = node.cond
+                   when Crystal::Var        then {cond.name, false}
+                   when Crystal::InstanceVar then {cond.name, true}
+                   else                          nil
+                   end
+        node.whens.each do |wh|
+          if case_var
+            narrowed_type = extract_when_type(wh)
+            if narrowed_type
+              name, is_ivar = case_var
+              env = is_ivar ? @env.ivars : @env.locals
+              prev = env[name]?
+              env[name] = narrowed_type
+              wh.body.accept(self)
+              if cursor_in?(wh.body)
+                restore_locals_with_union(node)
+                return false
+              end
+              env[name] = prev if prev
+              next
+            end
+          end
+          wh.body.accept(self)
+        end
+        if else_body = node.else
+          else_body.accept(self)
+        end
+        restore_locals_with_union(node)
+        false
+      end
+
+      def visit(node : Crystal::While) : Bool
+        return false unless before_cursor?(node)
+        push_locals_snapshot
+        true
+      end
+
+      def end_visit(node : Crystal::While)
+        restore_locals_with_union(node)
+      end
+
+      def visit(node : Crystal::ExceptionHandler) : Bool
+        return false unless before_cursor?(node)
+        push_locals_snapshot
+        true
+      end
+
+      def end_visit(node : Crystal::ExceptionHandler)
+        restore_locals_with_union(node)
+      end
+
       def register_arg(arg : Crystal::Arg)
         if restriction = arg.restriction
           if type_ref = type_ref_from_type(restriction)
@@ -128,6 +213,105 @@ module CRA::Psi
         when Crystal::ClassVar
           return if @fill_only && @env.cvars.has_key?(target.name)
           @env.cvars[target.name] = type_ref
+        end
+      end
+
+      private def push_locals_snapshot
+        @saved_locals_stack << @env.locals.dup
+      end
+
+      private def restore_locals_with_union(node : Crystal::ASTNode)
+        saved = @saved_locals_stack.pop? || return
+        return unless ended_before_cursor?(node)
+        @env.locals.each do |name, current_ref|
+          if prev_ref = saved[name]?
+            next if prev_ref.display == current_ref.display
+            @env.locals[name] = union_type_refs(prev_ref, current_ref)
+          end
+        end
+      end
+
+      private def ended_before_cursor?(node : Crystal::ASTNode) : Bool
+        cursor = @cursor
+        return true unless cursor
+        end_loc = node.end_location
+        return true unless end_loc
+        end_loc.line_number < cursor.line_number ||
+          (end_loc.line_number == cursor.line_number && end_loc.column_number < cursor.column_number)
+      end
+
+      private def union_type_refs(a : TypeRef, b : TypeRef) : TypeRef
+        members = [] of TypeRef
+        seen = Set(String).new
+        {a, b}.each do |ref|
+          if ref.union?
+            ref.union_types.each do |member|
+              members << member if seen.add?(member.display)
+            end
+          else
+            members << ref if seen.add?(ref.display)
+          end
+        end
+        members.size == 1 ? members.first : TypeRef.union(members)
+      end
+
+      private def apply_is_a_narrowing(cond : Crystal::ASTNode)
+        @narrowings.clear
+        collect_narrowings(cond)
+      end
+
+      private def collect_narrowings(cond : Crystal::ASTNode)
+        case cond
+        when Crystal::And
+          collect_narrowings(cond.left)
+          collect_narrowings(cond.right)
+        when Crystal::IsA
+          var_name = case obj = cond.obj
+                     when Crystal::Var        then obj.name
+                     when Crystal::InstanceVar then obj.name
+                     end
+          return unless var_name
+          narrowed_type = type_ref_from_type(cond.const)
+          return unless narrowed_type
+          is_ivar = cond.obj.is_a?(Crystal::InstanceVar)
+          env = is_ivar ? @env.ivars : @env.locals
+          prev = env[var_name]?
+          @narrowings << {var_name, is_ivar, prev || narrowed_type}
+          env[var_name] = narrowed_type
+        when Crystal::Var
+          narrow_nil(cond.name, false)
+        when Crystal::InstanceVar
+          narrow_nil(cond.name, true)
+        end
+      end
+
+      private def narrow_nil(name : String, is_ivar : Bool)
+        env = is_ivar ? @env.ivars : @env.locals
+        existing = env[name]?
+        return unless existing && existing.union?
+        non_nil = existing.union_types.reject { |t| t.name == "Nil" || t.name == "::Nil" }
+        return if non_nil.size == existing.union_types.size
+        @narrowings << {name, is_ivar, existing}
+        narrowed = non_nil.size == 1 ? non_nil.first : TypeRef.union(non_nil)
+        env[name] = narrowed
+      end
+
+      private def unapply_narrowing
+        @narrowings.reverse_each do |name, is_ivar, prev|
+          env = is_ivar ? @env.ivars : @env.locals
+          env[name] = prev
+        end
+        @narrowings.clear
+      end
+
+      private def extract_when_type(wh : Crystal::When) : TypeRef?
+        return nil unless wh.conds.size == 1
+        cond = wh.conds.first
+        case cond
+        when Crystal::Path, Crystal::Generic, Crystal::Union
+          type_ref_from_type(cond)
+        else
+          nil
         end
       end
 
@@ -207,6 +391,18 @@ module CRA::Psi
         return true unless loc
         loc.line_number < cursor.line_number ||
           (loc.line_number == cursor.line_number && loc.column_number <= cursor.column_number)
+      end
+
+      private def cursor_in?(node : Crystal::ASTNode) : Bool
+        cursor = @cursor
+        return false unless cursor
+        start_loc = node.location
+        return false unless start_loc
+        end_loc = node.end_location || start_loc
+        (cursor.line_number > start_loc.line_number ||
+          (cursor.line_number == start_loc.line_number && cursor.column_number >= start_loc.column_number)) &&
+          (cursor.line_number < end_loc.line_number ||
+            (cursor.line_number == end_loc.line_number && cursor.column_number <= end_loc.column_number))
       end
     end
 

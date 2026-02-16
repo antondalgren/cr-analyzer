@@ -456,4 +456,181 @@ describe CRA::Workspace do
       value.should contain("result : Hash(String, String)")
     end
   end
+
+  it "preserves union type when variable is reassigned inside conditional" do
+    code = <<-CRYSTAL
+      class Env
+        def self.fetch(key : String, default : T) : T forall T
+        end
+      end
+
+      def call
+        key = Env.fetch("KEY", [0u8])
+        if true
+          key = "override"
+        end
+        key
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_conditional_union.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "key", 3)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("Array(UInt8)")
+      value.should contain("String")
+    end
+  end
+
+  it "narrows type inside is_a? check" do
+    code = <<-CRYSTAL
+      def call(x : String | Int32)
+        if x.is_a?(String)
+          x
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_isa.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "x", 2)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("x : String")
+      value.should_not contain("Int32")
+    end
+  end
+
+  it "narrows nilable type on truthiness check" do
+    code = <<-CRYSTAL
+      def call(x : String | Nil)
+        if x
+          x
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_truthy.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "x", 2)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("x : String")
+      value.should_not contain("Nil")
+    end
+  end
+
+  it "narrows type with chained && conditions" do
+    code = <<-CRYSTAL
+      def call(x : String | Nil, y : Int32 | Nil)
+        if x && y
+          x
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_and_chain.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "x", 2)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("x : String")
+      value.should_not contain("Nil")
+    end
+  end
+
+  it "narrows type with && and is_a?" do
+    code = <<-CRYSTAL
+      def call(x : String | Nil)
+        if x && x.is_a?(String)
+          x
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_and_isa.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "x", 3)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("x : String")
+      value.should_not contain("Nil")
+    end
+  end
+
+  it "narrows type in case/when with type pattern" do
+    code = <<-CRYSTAL
+      def call(x : String | Int32)
+        case x
+        when String
+          x
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_case_when.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "x", 2)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("x : String")
+      value.should_not contain("Int32")
+    end
+  end
+
 end
