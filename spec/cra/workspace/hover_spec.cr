@@ -420,4 +420,40 @@ describe CRA::Workspace do
       value.should contain("bytes : Array(UInt8)")
     end
   end
+
+  it "shows inferred type from block body when method has no return type" do
+    code = <<-CRYSTAL
+      class FileReader
+        def self.open(path : String, &)
+        end
+      end
+
+      class IniParser
+        def self.parse(source : FileReader) : Hash(String, String)
+        end
+      end
+
+      def call
+        result = FileReader.open("path.ini") { |file| IniParser.parse(file) }
+        result
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_block_return.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "result", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("result : Hash(String, String)")
+    end
+  end
 end

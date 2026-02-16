@@ -88,7 +88,28 @@ module CRA::Psi
 
       method = candidates.find(&.return_type_ref) || candidates.first?
       return nil unless method
-      infer_method_return_type(method, receiver_type, call, context, scope_def, scope_class, cursor, depth)
+      result = infer_method_return_type(method, receiver_type, call, context, scope_def, scope_class, cursor, depth)
+      if result.nil? && (block = call.block)
+        result = infer_block_body_type(block, context, scope_def, scope_class, cursor, depth)
+      end
+      result
+    end
+
+    # When a method has no return type and is called with a block,
+    # infer the type from the block body's last expression.
+    private def infer_block_body_type(
+      block : Crystal::Block,
+      context : String?,
+      scope_def : Crystal::Def?,
+      scope_class : Crystal::ClassDef?,
+      cursor : Crystal::Location?,
+      depth : Int32
+    ) : TypeRef?
+      body = block.body
+      return nil unless body
+      last_expr = body.is_a?(Crystal::Expressions) ? body.expressions.last? : body
+      return nil unless last_expr
+      infer_type_ref(last_expr, context, scope_def, scope_class, cursor, depth + 1)
     end
 
     # Infers the return type of a class-level [] call (e.g., Slice[1u8, 2u8]).
