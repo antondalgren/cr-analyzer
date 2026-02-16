@@ -100,6 +100,18 @@ module CRA::Psi
         if context && (owner = find_type(context))
           results.concat(find_methods_with_ancestors(owner, node.name))
         end
+      when Crystal::Arg
+        type_refs = type_refs_for_node(node, context, scope_def, scope_class, cursor)
+        if type_refs.any?
+          file = current_file || @current_file
+          arg_type = type_refs.map(&.display).join(" | ")
+          results << CRA::Psi::LocalVar.new(
+            file: file,
+            name: node.name,
+            type: arg_type,
+            location: location_for(node)
+          )
+        end
       when Crystal::Var
         if scope_def
           if def_node = local_definition(scope_def, node.name, cursor)

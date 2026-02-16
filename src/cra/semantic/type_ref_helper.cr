@@ -29,7 +29,11 @@ module CRA::Psi
         types = [] of TypeRef
         node.types.each do |type|
           if ref = type_ref_from_type(type)
-            types << ref
+            if ref.union?
+              types.concat(ref.union_types)
+            else
+              types << ref
+            end
           end
         end
         return nil if types.empty?
@@ -37,6 +41,8 @@ module CRA::Psi
         TypeRef.union(types)
       when Crystal::Self
         TypeRef.named("self")
+      when Crystal::NumberLiteral
+        TypeRef.named(node.value)
       else
         nil
       end

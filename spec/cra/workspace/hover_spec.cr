@@ -799,6 +799,63 @@ describe CRA::Workspace do
     end
   end
 
+  it "shows type for method parameter on hover" do
+    code = <<-CRYSTAL
+      class Foo
+        def self.generate(ip : StaticArray(UInt8, 4) | StaticArray(UInt8, 16)? = nil)
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_arg.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "ip", 0)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("ip : StaticArray(UInt8, 4) | StaticArray(UInt8, 16) | Nil")
+    end
+  end
+
+  it "narrows nilable union type inside if truthiness check" do
+    code = <<-CRYSTAL
+      class Foo
+        def self.generate(ip : StaticArray(UInt8, 4) | StaticArray(UInt8, 16)? = nil)
+          if ip
+            ip
+          end
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_narrow_nilable.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "ip", 2)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("StaticArray(UInt8, 4)")
+      value.should contain("StaticArray(UInt8, 16)")
+      value.should_not contain("Nil")
+    end
+  end
+
   it "resolves C struct field types through chained access" do
     code = <<-CRYSTAL
       lib LibC
