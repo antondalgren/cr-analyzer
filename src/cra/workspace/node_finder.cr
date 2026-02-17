@@ -121,6 +121,10 @@ module CRA
       size = node.name_size
       return nil if size <= 0
 
+      # Crystal::Arg location starts at '@' for ivar-backed params but
+      # name_size only counts the name without the '@' prefix.
+      size += 1 if node.is_a?(Crystal::Arg) && !node.name_location
+
       end_loc = Crystal::Location.new(
         filename: loc.filename,
         line_number: loc.line_number,

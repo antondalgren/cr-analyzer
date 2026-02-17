@@ -1148,8 +1148,16 @@ describe CRA::Workspace do
       value = hover.not_nil!.contents.as_h["value"].as_s
       value.should contain("ip : Bytes")
 
-      # Hover on @ip in initialize param
+      # Hover on @ip in initialize param (first char)
       index = index_for(code, "@ip", 0)
+      pos = position_for(code, index)
+      hover = ws.hover(hover_request(uri, pos))
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("Bytes")
+
+      # Hover on last char of @ip param (the 'p') — tests NodeFinder @-prefix fix
+      index = index_for(code, "@ip", 0) + 2
       pos = position_for(code, index)
       hover = ws.hover(hover_request(uri, pos))
       hover.should_not be_nil
