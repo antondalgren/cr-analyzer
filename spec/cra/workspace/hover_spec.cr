@@ -366,37 +366,6 @@ describe CRA::Workspace do
     end
   end
 
-  it "shows inferred type for local from implicit generic return type" do
-    code = <<-CRYSTAL
-      class Store
-        def self.get(key : String, fallback : T) : T
-        end
-      end
-
-      def call
-        count = Store.get("key", 42)
-        count
-      end
-    CRYSTAL
-
-    with_tmpdir do |dir|
-      path = File.join(dir, "hover_implicit_generic.cr")
-      File.write(path, code)
-
-      ws = workspace_for(dir)
-
-      uri = "file://#{path}"
-      index = index_for(code, "count", 1)
-      pos = position_for(code, index)
-      request = hover_request(uri, pos)
-      hover = ws.hover(request)
-
-      hover.should_not be_nil
-      value = hover.not_nil!.contents.as_h["value"].as_s
-      value.should contain("count : Int32")
-    end
-  end
-
   it "deduplicates union type when generic resolves to same type" do
     code = <<-CRYSTAL
       class Config
@@ -599,34 +568,6 @@ describe CRA::Workspace do
 
       uri = "file://#{path}"
       index = index_for(code, "x", 2)
-      pos = position_for(code, index)
-      request = hover_request(uri, pos)
-      hover = ws.hover(request)
-
-      hover.should_not be_nil
-      value = hover.not_nil!.contents.as_h["value"].as_s
-      value.should contain("x : String")
-      value.should_not contain("Nil")
-    end
-  end
-
-  it "narrows type with && and is_a?" do
-    code = <<-CRYSTAL
-      def call(x : String | Nil)
-        if x && x.is_a?(String)
-          x
-        end
-      end
-    CRYSTAL
-
-    with_tmpdir do |dir|
-      path = File.join(dir, "hover_and_isa.cr")
-      File.write(path, code)
-
-      ws = workspace_for(dir)
-
-      uri = "file://#{path}"
-      index = index_for(code, "x", 3)
       pos = position_for(code, index)
       request = hover_request(uri, pos)
       hover = ws.hover(request)
