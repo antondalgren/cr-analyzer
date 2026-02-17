@@ -609,12 +609,12 @@ module CRA::Psi
               else
                 "#{method.min_arity}+"
               end
-      "#{owner_name}#{method.class_method ? "." : "#"}#{method.name} (arity #{arity})"
+      "#{owner_name}.#{method.name} (arity #{arity})"
     end
 
     private def method_signature(method : CRA::Psi::Method) : String
       owner_name = method.owner.try(&.name) || "self"
-      separator = method.class_method ? "." : "#"
+      separator = "."
       params = method.parameters.join(", ")
       signature = "def #{owner_name}#{separator}#{method.name}"
       signature += "(#{params})" unless params.empty?

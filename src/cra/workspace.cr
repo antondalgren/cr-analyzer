@@ -682,8 +682,14 @@ module CRA
       case definition
       when Psi::Method
         owner_name = definition.owner.try(&.name) || "self"
-        separator = definition.class_method ? "." : "#"
-        params = definition.parameters.join(", ")
+        separator = "."
+        params = definition.parameters.map_with_index { |name, i|
+          if type_ref = definition.param_type_refs[i]?
+            "#{name} : #{type_ref.display}"
+          else
+            name
+          end
+        }.join(", ")
         signature = "def #{owner_name}#{separator}#{definition.name}"
         signature += "(#{params})" unless params.empty?
         if definition.return_type_ref || definition.return_type != "Nil"

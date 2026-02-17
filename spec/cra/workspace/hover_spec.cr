@@ -62,8 +62,42 @@ describe CRA::Workspace do
       contents = hover.not_nil!.contents.as_h
       contents["kind"].as_s.should eq("markdown")
       value = contents["value"].as_s
-      value.should contain("def Greeter#greet(name)")
+      value.should contain("def Greeter.greet(name)")
       value.should contain("Says hello.")
+    end
+  end
+
+  it "wraps instance method hover in crystal code fence with dot separator" do
+    code = <<-CRYSTAL
+      class Foo
+        def bar(name : String) : String
+          name
+        end
+      end
+
+      def call
+        f = Foo.new
+        f.bar("baz")
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_dot.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "bar(\"baz\")")
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("```crystal")
+      value.should contain("def Foo.bar(name : String) : String")
+      value.should_not contain("Foo#bar")
     end
   end
 
@@ -936,8 +970,7 @@ describe CRA::Workspace do
 
       hover.should_not be_nil
       value = hover.not_nil!.contents.as_h["value"].as_s
-      value.should contain("def Sender.send(msg)")
-      value.should contain("Bool")
+      value.should contain("def Sender.send(msg : String) : Bool")
     end
   end
 
@@ -1337,7 +1370,7 @@ describe CRA::Workspace do
 
       hover.should_not be_nil
       value = hover.not_nil!.contents.as_h["value"].as_s
-      value.should contain("Greeter#name")
+      value.should contain("Greeter.name")
       value.should contain(": String")
 
       index = index_for(code, ".count")
@@ -1347,7 +1380,7 @@ describe CRA::Workspace do
 
       hover.should_not be_nil
       value = hover.not_nil!.contents.as_h["value"].as_s
-      value.should contain("Greeter#count")
+      value.should contain("Greeter.count")
       value.should contain(": Int32")
     end
   end
@@ -1388,7 +1421,7 @@ describe CRA::Workspace do
 
       hover.should_not be_nil
       value = hover.not_nil!.contents.as_h["value"].as_s
-      value.should contain("Greeter#greet")
+      value.should contain("Greeter.greet")
       value.should contain(": String")
     end
   end
