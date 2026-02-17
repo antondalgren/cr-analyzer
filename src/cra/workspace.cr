@@ -683,6 +683,11 @@ module CRA
     private def hover_signature(definition : Psi::PsiElement) : String
       case definition
       when Psi::Method
+        # Simple getter: 0-param instance method with a return type — show as property.
+        if !definition.class_method && definition.min_arity == 0 && definition.max_arity == 0 &&
+           (definition.return_type_ref || definition.return_type != "Nil")
+          return "#{definition.name} : #{definition.return_type}"
+        end
         owner_name = definition.owner.try(&.name) || "self"
         separator = "."
         params = definition.parameters.map_with_index { |name, i|

@@ -1495,8 +1495,8 @@ describe CRA::Workspace do
 
       hover.should_not be_nil
       value = hover.not_nil!.contents.as_h["value"].as_s
-      value.should contain("Greeter.name")
-      value.should contain(": String")
+      value.should contain("name : String")
+      value.should_not contain("def ")
 
       index = index_for(code, ".count")
       pos = position_for(code, index + 1)
@@ -1505,8 +1505,8 @@ describe CRA::Workspace do
 
       hover.should_not be_nil
       value = hover.not_nil!.contents.as_h["value"].as_s
-      value.should contain("Greeter.count")
-      value.should contain(": Int32")
+      value.should contain("count : Int32")
+      value.should_not contain("def ")
     end
   end
 
@@ -1548,6 +1548,52 @@ describe CRA::Workspace do
       value = hover.not_nil!.contents.as_h["value"].as_s
       value.should contain("Greeter.greet")
       value.should contain(": String")
+    end
+  end
+
+  it "shows simple getter hover as property type" do
+    code = <<-CRYSTAL
+      class Item
+        getter name : String
+        getter count : Int32
+
+        def initialize(@name : String, @count : Int32)
+        end
+      end
+
+      def call
+        item = Item.new("foo", 1)
+        item.name
+        item.count
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_getter_prop.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "item.name") + "item.".size
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("name : String")
+      value.should_not contain("def ")
+
+      index = index_for(code, "item.count") + "item.".size
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("count : Int32")
+      value.should_not contain("def ")
     end
   end
 end
