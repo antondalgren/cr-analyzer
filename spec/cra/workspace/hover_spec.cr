@@ -1266,7 +1266,7 @@ describe CRA::Workspace do
     end
   end
 
-  it "resolves outer variables inside proc literals" do
+  it "resolves outer variables and typed params inside proc literals" do
     code = <<-CRYSTAL
       def call
         foo = "hello"
@@ -1274,6 +1274,7 @@ describe CRA::Workspace do
         cb = ->(x : Int32) {
           foo
           bar
+          x
         }
       end
     CRYSTAL
@@ -1293,6 +1294,15 @@ describe CRA::Workspace do
       hover.should_not be_nil
       value = hover.not_nil!.contents.as_h["value"].as_s
       value.should contain("foo : String")
+
+      index = index_for(code, "x", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("x : Int32")
     end
   end
 
@@ -1339,6 +1349,47 @@ describe CRA::Workspace do
       value = hover.not_nil!.contents.as_h["value"].as_s
       value.should contain("Greeter#count")
       value.should contain(": Int32")
+    end
+  end
+
+  it "resolves classes defined inside macro-if blocks" do
+    code = <<-CRYSTAL
+      {% if true %}
+        class Greeter
+          def greet(name : String) : String
+            name
+          end
+        end
+      {% else %}
+        class Greeter
+          def greet(name : String) : String
+            name
+          end
+        end
+      {% end %}
+
+      def call
+        g = Greeter.new
+        g.greet("foo")
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_macro_if.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "greet", 2)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("Greeter#greet")
+      value.should contain(": String")
     end
   end
 end

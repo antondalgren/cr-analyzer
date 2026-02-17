@@ -78,7 +78,8 @@ module CRA::Psi
       scope_def : Crystal::Def? = nil,
       scope_class : Crystal::ClassDef? = nil,
       cursor : Crystal::Location? = nil,
-      current_file : String? = nil
+      current_file : String? = nil,
+      proc_def : Crystal::Def? = nil
     ) : Array(PsiElement)
       results = [] of PsiElement
       type_env : TypeEnv? = nil
@@ -120,7 +121,23 @@ module CRA::Psi
           )
         end
       when Crystal::Var
-        if scope_def
+        if proc_def
+          proc_def.args.each do |arg|
+            next unless arg.name == node.name
+            if restriction = arg.restriction
+              if type_ref = type_ref_from_type(restriction)
+                results << CRA::Psi::LocalVar.new(
+                  file: current_file || @current_file,
+                  name: node.name,
+                  type: type_ref.display,
+                  location: location_for(arg)
+                )
+              end
+            end
+            break
+          end
+        end
+        if results.empty? && scope_def
           if def_node = local_definition(scope_def, node.name, cursor)
             file = current_file || @current_file
             type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)

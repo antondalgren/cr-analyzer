@@ -75,6 +75,14 @@ module CRA
       nil
     end
 
+    def enclosing_proc_def : Crystal::Def?
+      context_path.reverse_each do |node|
+        return node if node.is_a?(Crystal::Def) && node.name == "->"
+        return nil if node.is_a?(Crystal::Def)
+      end
+      nil
+    end
+
     def enclosing_class : Crystal::ClassDef?
       context_path.reverse_each do |node|
         return node if node.is_a?(Crystal::ClassDef)

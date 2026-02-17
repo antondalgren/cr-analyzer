@@ -136,13 +136,17 @@ module CRA::Psi
     end
 
     def visit(node : Crystal::MacroIf) : Bool
-      return true if @owner_stack.empty?
       expand_macro_if_text(node)
       false
     end
 
     private def expand_macro_if_text(node : Crystal::MacroIf)
-      text = String.build { |io| collect_macro_literals(node.then, io) }
+      expand_macro_branch(node.then)
+      expand_macro_branch(node.else)
+    end
+
+    private def expand_macro_branch(node : Crystal::ASTNode)
+      text = String.build { |io| collect_macro_literals(node, io) }
       return if text.blank?
       begin
         parser = Crystal::Parser.new(text)
@@ -160,6 +164,7 @@ module CRA::Psi
         io << node.value
       when Crystal::MacroIf
         collect_macro_literals(node.then, io)
+        collect_macro_literals(node.else, io)
       end
     end
 
@@ -457,13 +462,17 @@ module CRA::Psi
     end
 
     def visit(node : Crystal::MacroIf) : Bool
-      return true if @owner_stack.empty?
       expand_macro_if_text(node)
       false
     end
 
     private def expand_macro_if_text(node : Crystal::MacroIf)
-      text = String.build { |io| collect_macro_literals(node.then, io) }
+      expand_macro_branch(node.then)
+      expand_macro_branch(node.else)
+    end
+
+    private def expand_macro_branch(node : Crystal::ASTNode)
+      text = String.build { |io| collect_macro_literals(node, io) }
       return if text.blank?
       begin
         parser = Crystal::Parser.new(text)
@@ -481,6 +490,7 @@ module CRA::Psi
         io << node.value
       when Crystal::MacroIf
         collect_macro_literals(node.then, io)
+        collect_macro_literals(node.else, io)
       end
     end
 

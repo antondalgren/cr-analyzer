@@ -237,7 +237,8 @@ module CRA
             effective_scope_def(finder, doc),
             finder.enclosing_class,
             finder.cursor_location,
-            request.text_document.uri
+            request.text_document.uri,
+            proc_def: finder.enclosing_proc_def
           )
           return elements_to_locations(definitions)
         end
@@ -319,7 +320,8 @@ module CRA
         effective_scope_def(finder, document),
         finder.enclosing_class,
         finder.cursor_location,
-        request.text_document.uri
+        request.text_document.uri,
+        proc_def: finder.enclosing_proc_def
       )
       return nil if definitions.empty?
 
