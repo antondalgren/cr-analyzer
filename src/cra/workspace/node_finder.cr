@@ -69,6 +69,7 @@ module CRA
 
     def enclosing_def : Crystal::Def?
       context_path.reverse_each do |node|
+        next if node.is_a?(Crystal::Def) && node.name == "->"
         return node if node.is_a?(Crystal::Def)
       end
       nil

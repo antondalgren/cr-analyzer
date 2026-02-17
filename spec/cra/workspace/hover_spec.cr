@@ -1265,4 +1265,34 @@ describe CRA::Workspace do
       value.should contain("bar : Int32")
     end
   end
+
+  it "resolves outer variables inside proc literals" do
+    code = <<-CRYSTAL
+      def call
+        foo = "hello"
+        bar = 42
+        cb = ->(x : Int32) {
+          foo
+          bar
+        }
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_proc.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "foo", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("foo : String")
+    end
+  end
 end
