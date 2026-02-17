@@ -417,6 +417,10 @@ module CRA::Psi
         return_type_ref = type_ref_from_type(return_type)
       end
       block_arg_types = extract_block_arg_types(node)
+      has_untyped_block = block_arg_types.empty? && node.block_arg
+      if has_untyped_block && (body = node.body)
+        block_arg_types = extract_yield_arg_types(body, node, owner)
+      end
       block_return_type_ref = extract_block_return_type(node)
       param_type_refs = node.args.map { |arg|
         restriction = arg.restriction
@@ -442,6 +446,9 @@ module CRA::Psi
       )
       @index.attach method_element, owner
       @index.register_method(method_element)
+      if has_untyped_block && block_arg_types.empty?
+        @index.add_pending_yield_def(node, owner, method_element)
+      end
       if body = node.body
         context_name = owner.responds_to?(:name) ? owner.name : nil
         body.accept(CallCollector.new(@index, method_element, node, context_name))
@@ -547,6 +554,131 @@ module CRA::Psi
       output = restriction.output
       return nil unless output
       type_ref_from_type(output)
+    end
+
+    private def extract_yield_arg_types(body : Crystal::ASTNode, def_node : Crystal::Def, owner : PsiElement) : Array(CRA::Psi::TypeRef)
+      extractor = YieldTypeExtractor.new(def_node, owner, @index)
+      body.accept(extractor)
+      extractor.types
+    end
+
+    # Extracts types from the first yield statement in a method body.
+    # Handles simple patterns: yield with vars assigned from .new, typed args,
+    # or self references.  Also tracks block params from calls whose methods
+    # have already been indexed.
+    class YieldTypeExtractor < Crystal::Visitor
+      include TypeRefHelper
+
+      getter types : Array(CRA::Psi::TypeRef)
+
+      def initialize(@def_node : Crystal::Def, @owner : PsiElement, @index : SemanticIndex)
+        @types = [] of CRA::Psi::TypeRef
+        @locals = {} of String => CRA::Psi::TypeRef
+        @found = false
+      end
+
+      def visit(node : Crystal::ASTNode) : Bool
+        !@found
+      end
+
+      def visit(node : Crystal::Call) : Bool
+        return false if @found
+        if block = node.block
+          hints = resolve_block_hints(node)
+          block.args.each_with_index do |arg, idx|
+            if hint = hints[idx]?
+              @locals[arg.name] = hint
+            end
+          end
+        end
+        true
+      end
+
+      def visit(node : Crystal::Assign) : Bool
+        return false if @found
+        if (target = node.target).is_a?(Crystal::Var)
+          ref = type_ref_from_value(node.value)
+          if ref.nil? && (call = node.value).is_a?(Crystal::Call)
+            if (call.name == "new" || call.name == "null" || call.name == "malloc") && call.obj.nil?
+              ref = CRA::Psi::TypeRef.named(@owner.name)
+            end
+          end
+          @locals[target.name] = ref if ref
+        end
+        true
+      end
+
+      def visit(node : Crystal::Def) : Bool
+        false
+      end
+
+      def visit(node : Crystal::Yield) : Bool
+        return false if @found
+        @found = true
+        resolved = [] of CRA::Psi::TypeRef
+        node.exps.each do |exp|
+          type_ref = infer_yield_exp(exp)
+          if type_ref
+            resolved << type_ref
+          else
+            return false
+          end
+        end
+        @types = resolved
+        false
+      end
+
+      private def resolve_block_hints(call : Crystal::Call) : Array(CRA::Psi::TypeRef)
+        obj = call.obj
+        return [] of CRA::Psi::TypeRef unless obj
+        receiver_ref = case obj
+                       when Crystal::Path
+                         CRA::Psi::TypeRef.named(obj.full)
+                       when Crystal::Generic
+                         type_ref_from_type(obj)
+                       else
+                         nil
+                       end
+        return [] of CRA::Psi::TypeRef unless receiver_ref
+        owner = @index.resolve_type_ref_public(receiver_ref)
+        return [] of CRA::Psi::TypeRef unless owner
+        class_method = obj.is_a?(Crystal::Path) || obj.is_a?(Crystal::Generic)
+        candidates = @index.find_methods_in_type(owner, call.name, class_method)
+        return [] of CRA::Psi::TypeRef if candidates.empty?
+        method = candidates.first
+        types = method.block_arg_types
+        owner_name = method.owner.try(&.name) || owner.name
+        types.map { |t| t.name == "self" ? CRA::Psi::TypeRef.named(owner_name) : t }
+      end
+
+      private def infer_yield_exp(node : Crystal::ASTNode) : CRA::Psi::TypeRef?
+        if ref = type_ref_from_value(node)
+          return ref
+        end
+        case node
+        when Crystal::Var
+          if node.name == "self"
+            return CRA::Psi::TypeRef.named(@owner.name)
+          end
+          @def_node.args.each do |arg|
+            if arg.name == node.name && (restriction = arg.restriction)
+              return type_ref_from_type(restriction)
+            end
+          end
+          @locals[node.name]?
+        when Crystal::InstanceVar
+          nil
+        when Crystal::Call
+          if node.name == "new" || node.name == "null" || node.name == "malloc"
+            if obj = node.obj
+              return type_ref_from_type(obj)
+            end
+          end
+          nil
+        else
+          nil
+        end
+      end
     end
 
     # Collects call edges from a method body to resolved method definitions.

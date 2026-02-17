@@ -193,7 +193,10 @@ module CRA::Psi
       return [] of TypeRef if candidates.empty?
       narrowed = filter_methods_by_arity_strict(candidates, call)
       method = (narrowed.empty? ? candidates : narrowed).first
-      method.block_arg_types
+      owner_name = method.owner.try(&.name) || owner.name
+      method.block_arg_types.map do |t|
+        t.name == "self" ? TypeRef.named(owner_name) : t
+      end
     end
 
     private def complete_members(

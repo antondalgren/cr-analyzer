@@ -43,6 +43,8 @@ module CRA::Psi
         TypeRef.named("self")
       when Crystal::NumberLiteral
         TypeRef.named(node.value)
+      when Crystal::ProcNotation
+        proc_type_ref_from_notation(node)
       else
         nil
       end
@@ -98,9 +100,50 @@ module CRA::Psi
             TypeRef.named("Hash", [key, value])
           end
         end
+      when Crystal::ProcLiteral
+        proc_type_ref_from_literal(node)
       else
         nil
       end
+    end
+
+    private def proc_type_ref_from_literal(node : Crystal::ProcLiteral) : TypeRef?
+      proc_def = node.def
+      args = [] of TypeRef
+      proc_def.args.each do |arg|
+        if restriction = arg.restriction
+          if ref = type_ref_from_type(restriction)
+            args << ref
+          else
+            return nil
+          end
+        else
+          return nil
+        end
+      end
+      ret = if ret_type = proc_def.return_type
+              type_ref_from_type(ret_type)
+            end
+      args << (ret || TypeRef.named("Nil"))
+      TypeRef.named("Proc", args)
+    end
+
+    private def proc_type_ref_from_notation(node : Crystal::ProcNotation) : TypeRef?
+      args = [] of TypeRef
+      if inputs = node.inputs
+        inputs.each do |input|
+          if ref = type_ref_from_type(input)
+            args << ref
+          else
+            return nil
+          end
+        end
+      end
+      ret = if output = node.output
+              type_ref_from_type(output)
+            end
+      args << (ret || TypeRef.named("Nil"))
+      TypeRef.named("Proc", args)
     end
 
     private def number_literal_type(node : Crystal::NumberLiteral) : String

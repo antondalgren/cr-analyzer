@@ -107,7 +107,7 @@ module CRA
       getter max_arity : Int32?
       getter class_method : Bool
       getter owner : PsiElement | Nil
-      getter block_arg_types : Array(TypeRef)
+      property block_arg_types : Array(TypeRef)
       getter block_return_type_ref : TypeRef?
       def initialize(
         @file : String?,

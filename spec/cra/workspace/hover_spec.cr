@@ -800,6 +800,32 @@ describe CRA::Workspace do
     end
   end
 
+  it "infers Proc type from proc literal assignment" do
+    code = <<-CRYSTAL
+      def call
+        handler = ->(x : Int32, y : String) { y }
+        handler
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_proc.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "handler", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("handler : Proc(Int32, String, Nil)")
+    end
+  end
+
   it "resolves Pointer#current to the pointee type" do
     code = <<-CRYSTAL
       lib LibC
@@ -1262,6 +1288,164 @@ describe CRA::Workspace do
       hover.should_not be_nil
       value = hover.not_nil!.contents.as_h["value"].as_s
       value.should contain("conn : Conn")
+    end
+  end
+
+  it "infers block param type from yield in method body" do
+    code = <<-CRYSTAL
+      class Bar
+        def self.build(capacity = 64, &)
+          builder = new
+          yield builder
+          builder.to_s
+        end
+      end
+
+      def call
+        Bar.build do |baz|
+          baz
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_yield.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "baz", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("baz : Bar")
+    end
+  end
+
+  it "infers block param type from chained yield through another builder" do
+    code = <<-CRYSTAL
+      class Baz
+        def self.build(capacity = 64, &)
+          builder = new
+          yield builder
+          builder.to_s
+        end
+      end
+
+      class Foo
+        def self.build(capacity = 64, &)
+          Baz.build(capacity) do |builder|
+            yield builder
+          end
+        end
+      end
+
+      def call
+        Foo.build do |bar|
+          bar
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_chain_yield.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "bar", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("bar : Baz")
+    end
+  end
+
+  it "infers block param type across files via pending yield resolution" do
+    builder_code = <<-CRYSTAL
+      class Foo
+        class Builder
+          def self.build(capacity = 64, &)
+            builder = new
+            yield builder
+            builder.to_s
+          end
+        end
+      end
+    CRYSTAL
+
+    main_code = <<-CRYSTAL
+      class Foo
+        def self.build(capacity = 64, &)
+          Foo::Builder.build(capacity) do |builder|
+            yield builder
+          end
+        end
+      end
+
+      def call
+        Foo.build do |bar|
+          bar
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      File.write(File.join(dir, "builder.cr"), builder_code)
+      path = File.join(dir, "main.cr")
+      File.write(path, main_code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(main_code, "bar", 1)
+      pos = position_for(main_code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("bar : Foo::Builder")
+    end
+  end
+
+  it "resolves Self block param type to the owner class" do
+    code = <<-CRYSTAL
+      class Foo
+        def self.build(capacity : Int32, & : (self) -> Nil) : self
+        end
+      end
+
+      def call
+        Foo.build(16) do |bar|
+          bar
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_self_block.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "bar", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("bar : Foo")
     end
   end
 

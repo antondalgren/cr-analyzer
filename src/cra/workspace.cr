@@ -64,6 +64,7 @@ module CRA
       scan_path(lib_path, seen) if Dir.exists?(lib_path.to_s)
 
       scan_path(@path, seen)
+      @analyzer.resolve_pending_yield_types
       @analyzer.register_primitive_superclasses
       @analyzer.dump_roots if ENV["CRA_DUMP_ROOTS"]? == "1"
     end
@@ -160,6 +161,7 @@ module CRA
         reindexed << dep_uri
       end
 
+      @analyzer.resolve_pending_yield_types
       reindexed
     rescue ex : Exception
       Log.error { "Error reindexing #{uri}: #{ex.message}" }
