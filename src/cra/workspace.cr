@@ -588,16 +588,33 @@ module CRA
         def_loc = def_node.location
         def_file = def_node.file
         next unless def_loc && def_file
-        uri = def_file.starts_with?("file://") ? def_file : "file://#{def_file}"
-        key = "#{uri}:#{def_loc.start_line}:#{def_loc.start_character}:#{def_loc.end_line}:#{def_loc.end_character}"
+        uri, range = resolve_macro_uri(def_file, def_loc)
+        key = "#{uri}:#{range.start_position.line}:#{range.start_position.character}:#{range.end_position.line}:#{range.end_position.character}"
         next if seen[key]?
         seen[key] = true
-        locations << Types::Location.new(
-          uri: uri,
-          range: def_loc.to_range
-        )
+        locations << Types::Location.new(uri: uri, range: range)
       end
       locations
+    end
+
+    private def resolve_macro_uri(file : String, loc : Psi::Location) : {String, Types::Range}
+      if file.starts_with?("crystal-macro:")
+        # Format: crystal-macro:{path}/{macro_name}/{line}_{col}.cr
+        raw = file.sub("crystal-macro:", "")
+        if match = raw.match(/^(.+)\/\w+\/(\d+)_(\d+)\.cr$/)
+          original_path = match[1]
+          line = match[2].to_i - 1
+          col = match[3].to_i - 1
+          uri = "file://#{original_path}"
+          range = Types::Range.new(
+            start_position: Types::Position.new(line: line, character: col),
+            end_position: Types::Position.new(line: line, character: col)
+          )
+          return {uri, range}
+        end
+      end
+      uri = file.starts_with?("file://") ? file : "file://#{file}"
+      {uri, loc.to_range}
     end
 
     # For top-level code (no enclosing def), create a synthetic Def so that
@@ -667,7 +684,7 @@ module CRA
         params = definition.parameters.join(", ")
         signature = "def #{owner_name}#{separator}#{definition.name}"
         signature += "(#{params})" unless params.empty?
-        if definition.return_type_ref
+        if definition.return_type_ref || definition.return_type != "Nil"
           signature += " : #{definition.return_type}"
         end
         signature

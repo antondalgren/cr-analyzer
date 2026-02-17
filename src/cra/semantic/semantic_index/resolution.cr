@@ -199,7 +199,11 @@ module CRA::Psi
             end
           when Crystal::Var
             type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
-            if type_ref = type_env.locals[obj.name]?
+            type_ref = type_env.locals[obj.name]?
+            unless type_ref
+              type_ref = infer_type_ref(obj, context, scope_def, scope_class, cursor)
+            end
+            if type_ref
               if owner = resolve_type_ref(type_ref, context)
                 candidates.concat(find_methods_with_ancestors(owner, node.name, false))
               end

@@ -1295,4 +1295,50 @@ describe CRA::Workspace do
       value.should contain("foo : String")
     end
   end
+
+  it "shows return type for getter with default value" do
+    code = <<-CRYSTAL
+      class Greeter
+        getter name = "world"
+        getter count = 0
+
+        def initialize(@name = "world", @count = 0)
+        end
+      end
+
+      def call
+        g = Greeter.new
+        g.name
+        g.count
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_getter_default.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, ".name")
+      pos = position_for(code, index + 1)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("Greeter#name")
+      value.should contain(": String")
+
+      index = index_for(code, ".count")
+      pos = position_for(code, index + 1)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("Greeter#count")
+      value.should contain(": Int32")
+    end
+  end
 end
