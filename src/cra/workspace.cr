@@ -234,7 +234,7 @@ module CRA
           definitions = @analyzer.find_definitions(
             n,
             finder.enclosing_type_name,
-            finder.enclosing_def,
+            effective_scope_def(finder, doc),
             finder.enclosing_class,
             finder.cursor_location,
             request.text_document.uri
@@ -316,7 +316,7 @@ module CRA
       definitions = @analyzer.find_definitions(
         node,
         finder.enclosing_type_name,
-        finder.enclosing_def,
+        effective_scope_def(finder, document),
         finder.enclosing_class,
         finder.cursor_location,
         request.text_document.uri
@@ -598,6 +598,18 @@ module CRA
         )
       end
       locations
+    end
+
+    # For top-level code (no enclosing def), create a synthetic Def so that
+    # build_type_env / TypeCollector can collect local variable types.
+    private def effective_scope_def(finder : NodeFinder, document : WorkspaceDocument) : Crystal::Def?
+      finder.enclosing_def || file_scope_def(document)
+    end
+
+    private def file_scope_def(document : WorkspaceDocument) : Crystal::Def?
+      if body = document.program
+        Crystal::Def.new("__file__", [] of Crystal::Arg, body)
+      end
     end
 
     private def hover_contents(definitions : Array(Psi::PsiElement)) : JSON::Any

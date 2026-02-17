@@ -1198,4 +1198,71 @@ describe CRA::Workspace do
       value.should contain("@version : Int32")
     end
   end
+
+  it "infers block param type for ClassName.new { |p| }" do
+    code = <<-CRYSTAL
+      class Conn
+        def self.new(&)
+          new.tap { |inst| yield inst }
+        end
+      end
+
+      def call
+        Conn.new do |conn|
+          conn
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_new_block.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "conn", 1)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("conn : Conn")
+    end
+  end
+
+  it "resolves top-level variable types" do
+    code = <<-CRYSTAL
+      foo = "hello"
+      bar = 42
+      baz = true
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "hover_toplevel.cr")
+      File.write(path, code)
+
+      ws = workspace_for(dir)
+
+      uri = "file://#{path}"
+      index = index_for(code, "foo", 0)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("foo : String")
+
+      index = index_for(code, "bar", 0)
+      pos = position_for(code, index)
+      request = hover_request(uri, pos)
+      hover = ws.hover(request)
+
+      hover.should_not be_nil
+      value = hover.not_nil!.contents.as_h["value"].as_s
+      value.should contain("bar : Int32")
+    end
+  end
 end

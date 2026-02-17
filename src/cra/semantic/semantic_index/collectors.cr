@@ -402,6 +402,12 @@ module CRA::Psi
           return hints
         end
 
+        # ClassName.new { |instance| ... } — block receives the new instance.
+        if method_name == "new"
+          hints << receiver_type
+          return hints
+        end
+
         if name
           base = name.starts_with?("::") ? name[2..] : name
           case base

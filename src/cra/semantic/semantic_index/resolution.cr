@@ -137,7 +137,8 @@ module CRA::Psi
               location: location_for(def_node)
             )
           end
-        elsif context && (owner = find_type(context))
+        end
+        if results.empty? && context && (owner = find_type(context))
           # Class-level var (e.g., inside getter/property/setter declaration).
           # Look for a matching accessor method (including ancestors) to get the type.
           methods = find_methods_with_ancestors(owner, node.name, false)
